@@ -50,6 +50,7 @@ model Upload {
   mimeType      String
   status        String   @default("UPLOADED")
   extractedText String?
+  fileData      Bytes?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

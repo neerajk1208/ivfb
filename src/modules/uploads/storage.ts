@@ -1,9 +1,10 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { prisma } from "@/lib/db";
 
 export interface StorageProvider {
-  save(key: string, data: Buffer, mimeType: string): Promise<string>;
-  get(key: string): Promise<Buffer | null>;
+  save(key: string, data: Buffer, mimeType: string, uploadId?: string): Promise<string>;
+  get(key: string, uploadId?: string): Promise<Buffer | null>;
   delete(key: string): Promise<void>;
   getUrl(key: string): Promise<string>;
 }
@@ -51,39 +52,49 @@ export class LocalStorageProvider implements StorageProvider {
   }
 }
 
-export class S3StorageProvider implements StorageProvider {
-  private bucket: string;
-  private region: string;
-
-  constructor() {
-    this.bucket = process.env.S3_BUCKET || "";
-    this.region = process.env.S3_REGION || "us-east-1";
+export class DatabaseStorageProvider implements StorageProvider {
+  async save(key: string, data: Buffer, mimeType: string, uploadId?: string): Promise<string> {
+    if (!uploadId) {
+      throw new Error("uploadId required for database storage");
+    }
+    await prisma.upload.update({
+      where: { id: uploadId },
+      data: { fileData: new Uint8Array(data) },
+    });
+    return key;
   }
 
-  async save(key: string, data: Buffer, mimeType: string): Promise<string> {
-    // S3 implementation would go here
-    // For MVP, we'll throw if S3 is selected but not properly configured
-    throw new Error("S3 storage not implemented yet. Use UPLOAD_STORAGE=local");
-  }
-
-  async get(key: string): Promise<Buffer | null> {
-    throw new Error("S3 storage not implemented yet. Use UPLOAD_STORAGE=local");
+  async get(key: string, uploadId?: string): Promise<Buffer | null> {
+    if (!uploadId) {
+      const upload = await prisma.upload.findFirst({
+        where: { storageKey: key },
+        select: { fileData: true },
+      });
+      if (!upload?.fileData) return null;
+      return Buffer.from(upload.fileData);
+    }
+    const upload = await prisma.upload.findUnique({
+      where: { id: uploadId },
+      select: { fileData: true },
+    });
+    if (!upload?.fileData) return null;
+    return Buffer.from(upload.fileData);
   }
 
   async delete(key: string): Promise<void> {
-    throw new Error("S3 storage not implemented yet. Use UPLOAD_STORAGE=local");
+    // Data is deleted when Upload record is deleted
   }
 
   async getUrl(key: string): Promise<string> {
-    throw new Error("S3 storage not implemented yet. Use UPLOAD_STORAGE=local");
+    return `/api/uploads/file/${encodeURIComponent(key)}`;
   }
 }
 
 export function getStorageProvider(): StorageProvider {
   const storageType = process.env.UPLOAD_STORAGE || "local";
 
-  if (storageType === "s3") {
-    return new S3StorageProvider();
+  if (storageType === "database") {
+    return new DatabaseStorageProvider();
   }
 
   return new LocalStorageProvider();

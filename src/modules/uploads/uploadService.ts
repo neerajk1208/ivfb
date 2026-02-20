@@ -44,7 +44,7 @@ export async function saveUploadFile(
     throw new Error("Upload not found");
   }
 
-  await storage.save(upload.storageKey, data, upload.mimeType);
+  await storage.save(upload.storageKey, data, upload.mimeType, uploadId);
 }
 
 export async function getUploadById(uploadId: string) {
@@ -67,8 +67,8 @@ export async function updateUploadStatus(
   });
 }
 
-export async function getUploadFile(storageKey: string): Promise<Buffer | null> {
-  return storage.get(storageKey);
+export async function getUploadFile(storageKey: string, uploadId?: string): Promise<Buffer | null> {
+  return storage.get(storageKey, uploadId);
 }
 
 function getExtensionFromMimeType(mimeType: string): string {

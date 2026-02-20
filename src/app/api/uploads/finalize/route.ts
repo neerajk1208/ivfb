@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireUser, getActiveCycle } from "@/lib/auth";
 import { uploadFinalizeSchema } from "@/lib/validate";
 import {
@@ -7,7 +7,6 @@ import {
   validationErrorResponse,
   unauthorizedResponse,
   notFoundResponse,
-  serverErrorResponse,
   parseJsonBody,
 } from "@/lib/http";
 import {
@@ -38,17 +37,28 @@ export async function POST(request: NextRequest) {
       return notFoundResponse("Upload");
     }
 
-    const fileData = await getUploadFile(upload.storageKey);
+    console.log(`Processing upload: ${upload.id}, kind: ${upload.kind}, mime: ${upload.mimeType}`);
+
+    const fileData = await getUploadFile(upload.storageKey, upload.id);
     if (!fileData) {
-      return errorResponse("File not found in storage");
+      return errorResponse("File not found in storage. Please try uploading again.");
     }
 
+    console.log(`File loaded: ${fileData.length} bytes`);
+
     // Extract text or get image base64
-    const fileResult = await extractTextFromFile(
-      fileData,
-      upload.mimeType,
-      upload.kind as "PDF" | "IMAGE"
-    );
+    let fileResult;
+    try {
+      fileResult = await extractTextFromFile(
+        fileData,
+        upload.mimeType,
+        upload.kind as "PDF" | "IMAGE"
+      );
+      console.log(`Extraction type: ${fileResult.type}`);
+    } catch (extractError) {
+      console.error("File extraction error:", extractError);
+      return errorResponse("Could not read the file. Please try a different file or enter manually.");
+    }
 
     // Update upload with extracted text or note about image
     const textForStorage = fileResult.type === "text" 
@@ -62,9 +72,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Use appropriate extraction method based on file type
+    console.log(`Calling OpenAI for ${fileResult.type} extraction...`);
     const extraction = fileResult.type === "text"
       ? await extractProtocolFromText(fileResult.content)
       : await extractProtocolFromImage(fileResult.base64);
+    console.log(`Extraction complete. Medications found: ${extraction.medications.length}`);
 
     // Check if extraction failed completely
     const extractionFailed = extraction.missingFields?.includes("extraction_failed");
@@ -86,13 +98,19 @@ export async function POST(request: NextRequest) {
           ? "No medications found. Please add them manually on the review page."
           : null,
     });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
-    console.error("Upload finalize error:", error);
-    return serverErrorResponse(
-      error instanceof Error ? error.message : "Processing failed"
+    console.error("Upload finalize error:", error?.message || error);
+    
+    // Always return JSON
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: error?.message || "Processing failed. Please try again or enter your protocol manually." 
+      },
+      { status: 500 }
     );
   }
 }

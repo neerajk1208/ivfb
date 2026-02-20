@@ -111,6 +111,13 @@ export default function UploadPage() {
         body: JSON.stringify({ uploadId }),
       });
 
+      // Handle non-JSON responses (e.g., timeout errors)
+      const contentType = finalizeRes.headers.get("content-type");
+      if (!contentType?.includes("application/json")) {
+        console.error("Non-JSON response:", await finalizeRes.text());
+        throw new Error("Server error. Please try again or enter your protocol manually.");
+      }
+
       const finalizeData = await finalizeRes.json();
       if (!finalizeRes.ok) {
         throw new Error(finalizeData.error || "Failed to process file");

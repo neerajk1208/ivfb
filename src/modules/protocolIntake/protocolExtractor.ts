@@ -77,18 +77,33 @@ export async function extractProtocolFromText(
 export async function extractProtocolFromImage(
   imageBase64: string
 ): Promise<ProtocolPlanExtraction> {
+  // Validate the base64 image
+  if (!imageBase64 || !imageBase64.startsWith("data:image/")) {
+    console.error("Invalid image format - not a data URL");
+    return getFailedExtraction("Invalid image format");
+  }
+
+  // Check image size (rough estimate - base64 is ~1.37x original)
+  const sizeInMB = (imageBase64.length * 0.75) / (1024 * 1024);
+  if (sizeInMB > 20) {
+    console.error(`Image too large: ${sizeInMB.toFixed(2)}MB`);
+    return getFailedExtraction("Image too large. Please use a smaller image (under 20MB).");
+  }
+
+  console.log(`Processing image: ~${sizeInMB.toFixed(2)}MB`);
+
   const openai = getOpenAI();
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o", // Vision requires gpt-4o or gpt-4-turbo
+      model: "gpt-4o",
       messages: [
         { role: "system", content: EXTRACTION_PROMPT },
         {
           role: "user",
           content: [
             { type: "text", text: "Extract the IVF protocol from this image. Return JSON only." },
-            { type: "image_url", image_url: { url: imageBase64 } },
+            { type: "image_url", image_url: { url: imageBase64, detail: "high" } },
           ],
         },
       ],
@@ -100,9 +115,22 @@ export async function extractProtocolFromImage(
       throw new Error("Empty response from OpenAI Vision");
     }
 
+    console.log("OpenAI Vision response received");
     return parseAndValidate(content);
-  } catch (error) {
-    console.error("Image extraction error:", error);
+  } catch (error: any) {
+    console.error("Image extraction error:", error?.message || error);
+    
+    // Check for specific OpenAI errors
+    if (error?.status === 400) {
+      return getFailedExtraction("Could not process this image. Please try a different image or enter manually.");
+    }
+    if (error?.status === 401) {
+      return getFailedExtraction("API configuration error. Please contact support.");
+    }
+    if (error?.status === 429) {
+      return getFailedExtraction("Service busy. Please try again in a moment.");
+    }
+    
     return getFailedExtraction("Failed to extract from image. Please try a clearer image or enter manually.");
   }
 }
