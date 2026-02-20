@@ -40,14 +40,31 @@ export default function OnboardingPage() {
   const [timezone, setTimezone] = useState("America/Los_Angeles");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [checkingCycle, setCheckingCycle] = useState(true);
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
+      return;
+    }
+
+    if (status === "authenticated") {
+      fetch("/api/protocol/current")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.data?.medications?.length > 0) {
+            router.push("/today");
+          } else {
+            setCheckingCycle(false);
+          }
+        })
+        .catch(() => {
+          setCheckingCycle(false);
+        });
     }
   }, [status, router]);
 
-  if (status === "loading") {
+  if (status === "loading" || checkingCycle) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Loading...</div>

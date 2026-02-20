@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { ServiceWorkerProvider } from "@/components/providers/ServiceWorkerProvider";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -53,6 +54,7 @@ export default function RootLayout({
             <main className="min-h-screen">
               {children}
             </main>
+            <InstallPrompt />
             <Toaster position="top-center" />
           </ServiceWorkerProvider>
         </SessionProvider>
