@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/db";
-import { startOfDay, endOfDay } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
 import { generateBuddyReply } from "@/modules/buddy/buddyService";
 
@@ -33,20 +32,28 @@ export async function createChatMessage(input: CreateChatMessageInput) {
 export async function getMessagesForDate(
   userId: string,
   cycleId: string,
-  date: Date,
+  dateString: string,
   timezone: string
 ) {
-  const localDate = toZonedTime(date, timezone);
-  const dayStart = fromZonedTime(startOfDay(localDate), timezone);
-  const dayEnd = fromZonedTime(endOfDay(localDate), timezone);
+  // Parse date string as local date in user's timezone
+  // dateString is "YYYY-MM-DD" format
+  const [year, month, day] = dateString.split("-").map(Number);
+  
+  // Create start of day in user's timezone
+  const dayStartLocal = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const dayEndLocal = new Date(year, month - 1, day, 23, 59, 59, 999);
+  
+  // Convert to UTC for database query
+  const dayStartUTC = fromZonedTime(dayStartLocal, timezone);
+  const dayEndUTC = fromZonedTime(dayEndLocal, timezone);
 
   return prisma.chatMessage.findMany({
     where: {
       userId,
       cycleId,
       createdAt: {
-        gte: dayStart,
-        lte: dayEnd,
+        gte: dayStartUTC,
+        lte: dayEndUTC,
       },
     },
     orderBy: { createdAt: "asc" },
@@ -235,16 +242,18 @@ export async function sendUserMessage(
   return { userMessage, buddyReply: buddyMessage, limitReached: false };
 }
 
-export async function markMessagesAsRead(userId: string, cycleId: string, date: Date, timezone: string) {
-  const localDate = toZonedTime(date, timezone);
-  const dayStart = fromZonedTime(startOfDay(localDate), timezone);
-  const dayEnd = fromZonedTime(endOfDay(localDate), timezone);
+export async function markMessagesAsRead(userId: string, cycleId: string, dateString: string, timezone: string) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const dayStartLocal = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const dayEndLocal = new Date(year, month - 1, day, 23, 59, 59, 999);
+  const dayStartUTC = fromZonedTime(dayStartLocal, timezone);
+  const dayEndUTC = fromZonedTime(dayEndLocal, timezone);
 
   await prisma.chatMessage.updateMany({
     where: {
       userId,
       cycleId,
-      createdAt: { gte: dayStart, lte: dayEnd },
+      createdAt: { gte: dayStartUTC, lte: dayEndUTC },
       read: false,
     },
     data: { read: true },

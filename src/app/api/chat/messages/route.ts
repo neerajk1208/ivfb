@@ -20,16 +20,18 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const dateParam = searchParams.get("date");
     
-    const date = dateParam ? new Date(dateParam) : new Date();
+    // Use date string directly (YYYY-MM-DD format)
+    const today = new Date();
+    const dateString = dateParam || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
     const messages = await getMessagesForDate(
       user.id,
       cycle.id,
-      date,
+      dateString,
       user.timezone
     );
 
-    await markMessagesAsRead(user.id, cycle.id, date, user.timezone);
+    await markMessagesAsRead(user.id, cycle.id, dateString, user.timezone);
 
     return successResponse({ messages });
   } catch (error) {
