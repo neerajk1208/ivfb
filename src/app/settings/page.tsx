@@ -25,7 +25,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Bell, BellOff } from "lucide-react";
+import { Bell, BellOff, Calendar, CalendarCheck, CalendarX } from "lucide-react";
 
 const COMMON_TIMEZONES = [
   { value: "America/New_York", label: "Eastern Time (ET)" },
@@ -68,6 +68,10 @@ export default function SettingsPage() {
   const [pushError, setPushError] = useState("");
   const [isSendingTestPush, setIsSendingTestPush] = useState(false);
 
+  const [calendarConnected, setCalendarConnected] = useState(false);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
@@ -77,6 +81,7 @@ export default function SettingsPage() {
     if (status === "authenticated") {
       fetchSettings();
       checkPushSupport();
+      checkCalendarStatus();
     }
   }, [status, router]);
 
@@ -96,6 +101,59 @@ export default function SettingsPage() {
       } catch (err) {
         console.error("Failed to check push status:", err);
       }
+    }
+  };
+
+  const checkCalendarStatus = async () => {
+    try {
+      const res = await fetch("/api/calendar/status");
+      const data = await res.json();
+      if (res.ok && data.data) {
+        setCalendarConnected(data.data.connected);
+      }
+    } catch (err) {
+      console.error("Failed to check calendar status:", err);
+    }
+  };
+
+  const handleConnectCalendar = () => {
+    setCalendarLoading(true);
+    window.location.href = "/api/calendar/auth?returnTo=/settings";
+  };
+
+  const handleDisconnectCalendar = async () => {
+    setCalendarLoading(true);
+    try {
+      const res = await fetch("/api/calendar/disconnect", { method: "POST" });
+      if (res.ok) {
+        setCalendarConnected(false);
+        setMessage("Calendar disconnected");
+      } else {
+        setMessage("Failed to disconnect calendar");
+      }
+    } catch {
+      setMessage("Failed to disconnect calendar");
+    } finally {
+      setCalendarLoading(false);
+      setTimeout(() => setMessage(""), 3000);
+    }
+  };
+
+  const handleSyncCalendar = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch("/api/calendar/sync", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(data.data?.message || "Calendar synced!");
+      } else {
+        setMessage(data.error || "Failed to sync calendar");
+      }
+    } catch {
+      setMessage("Failed to sync calendar");
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setMessage(""), 3000);
     }
   };
 
@@ -375,6 +433,65 @@ export default function SettingsPage() {
                 Push notifications are not supported on this device/browser.
                 Try adding this app to your home screen first.
               </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Google Calendar</CardTitle>
+            <CardDescription>
+              Sync appointments to your calendar
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                {calendarConnected ? (
+                  <CalendarCheck className="h-5 w-5 text-primary" />
+                ) : (
+                  <CalendarX className="h-5 w-5 text-muted-foreground" />
+                )}
+                <div>
+                  <p className="font-medium">
+                    {calendarConnected ? "Connected" : "Not connected"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {calendarConnected
+                      ? "Your appointments sync to Google Calendar"
+                      : "Connect to add appointments to your calendar"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {calendarConnected ? (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={handleSyncCalendar}
+                  disabled={isSyncing}
+                >
+                  {isSyncing ? "Syncing..." : "Sync Now"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={handleDisconnectCalendar}
+                  disabled={calendarLoading}
+                >
+                  Disconnect
+                </Button>
+              </div>
+            ) : (
+              <Button
+                onClick={handleConnectCalendar}
+                disabled={calendarLoading}
+                className="w-full"
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Connect Google Calendar
+              </Button>
             )}
           </CardContent>
         </Card>

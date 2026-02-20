@@ -8,17 +8,20 @@ datasource db {
 }
 
 model User {
-  id              String   @id @default(cuid())
-  email           String   @unique
-  name            String?
-  timezone        String   @default("America/Los_Angeles")
-  phoneE164       String?  @unique
-  smsConsent      Boolean  @default(false)
-  quietHours      Json?
-  dailyMsgCount   Int      @default(0)
-  lastMsgDate     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  email                 String   @unique
+  name                  String?
+  timezone              String   @default("America/Los_Angeles")
+  phoneE164             String?  @unique
+  smsConsent            Boolean  @default(false)
+  quietHours            Json?
+  dailyMsgCount         Int      @default(0)
+  lastMsgDate           DateTime?
+  calendarAccessToken   String?
+  calendarRefreshToken  String?
+  calendarConnectedAt   DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   cycles            Cycle[]
   uploads           Upload[]

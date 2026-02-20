@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Pill, Calendar, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Pill, Calendar, AlertCircle, CalendarPlus } from "lucide-react";
 
 interface Medication {
   id: string;
@@ -113,6 +113,7 @@ export default function ReviewPage() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"medications" | "appointments">("medications");
+  const [showCalendarStep, setShowCalendarStep] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -307,12 +308,21 @@ export default function ReviewPage() {
         throw new Error(data.error || "Failed to confirm protocol");
       }
 
-      router.push("/today");
+      setShowCalendarStep(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setIsConfirming(false);
     }
+  };
+
+  const handleConnectCalendar = () => {
+    const returnTo = "/today?calendar=connected";
+    window.location.href = `/api/calendar/auth?returnTo=${encodeURIComponent(returnTo)}`;
+  };
+
+  const handleSkipCalendar = () => {
+    router.push("/today");
   };
 
   if (status === "loading" || isLoading) {
@@ -325,6 +335,78 @@ export default function ReviewPage() {
 
   if (!protocol) {
     return null;
+  }
+
+  if (showCalendarStep) {
+    const appointmentPreviews = protocol.appointments.slice(0, 4).map((apt) => {
+      const typeLabels: Record<string, string> = {
+        BLOODWORK: "Bloodwork",
+        ULTRASOUND: "Ultrasound",
+        MONITORING: "Monitoring",
+        TRIGGER: "Trigger Shot",
+        RETRIEVAL: "Egg Retrieval",
+        TRANSFER: "Embryo Transfer",
+      };
+      const startDate = new Date(protocol.cycleStartDate);
+      startDate.setDate(startDate.getDate() + apt.dayOffset);
+      const dateStr = startDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const timeStr = apt.exactTime || "";
+      return `${typeLabels[apt.type] || apt.type} (${dateStr}${timeStr ? `, ${timeStr}` : ""})`;
+    });
+
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+        <div className="max-w-md w-full space-y-6">
+          <div className="text-center space-y-2">
+            <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center mb-4">
+              <CalendarPlus className="w-8 h-8 text-primary" />
+            </div>
+            <h1 className="text-2xl font-semibold">Add to Google Calendar?</h1>
+            <p className="text-muted-foreground">
+              We can add your appointments to your calendar
+            </p>
+          </div>
+
+          {appointmentPreviews.length > 0 && (
+            <Card>
+              <CardContent className="pt-4">
+                <ul className="space-y-2 text-sm">
+                  {appointmentPreviews.map((preview, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                      {preview}
+                    </li>
+                  ))}
+                  {protocol.appointments.length > 4 && (
+                    <li className="text-muted-foreground">
+                      +{protocol.appointments.length - 4} more
+                    </li>
+                  )}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="space-y-3">
+            <Button onClick={handleConnectCalendar} className="w-full">
+              <CalendarPlus className="w-4 h-4 mr-2" />
+              Connect Google Calendar
+            </Button>
+            <Button
+              onClick={handleSkipCalendar}
+              variant="ghost"
+              className="w-full text-muted-foreground"
+            >
+              Skip for now
+            </Button>
+          </div>
+
+          <p className="text-xs text-center text-muted-foreground">
+            You can always connect your calendar later in Settings
+          </p>
+        </div>
+      </div>
+    );
   }
 
   const hasLowConfidence =
