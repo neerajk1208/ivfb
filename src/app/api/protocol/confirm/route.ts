@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       return errorResponse("Invalid JSON body");
     }
 
-    const { protocolPlanId, cycleStartDate, medications, milestones, notes } =
+    const { protocolPlanId, cycleStartDate, medications, appointments, notes } =
       body as any;
 
     if (!protocolPlanId || !cycleStartDate || !medications) {
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     await updateProtocolPlanFromReview(protocolPlanId, {
       cycleStartDate,
       medications,
-      milestones,
+      appointments,
       notes,
     });
 

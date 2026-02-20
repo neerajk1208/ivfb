@@ -16,6 +16,21 @@ interface GenerateTasksInput {
   quietHours?: { start: string; end: string } | null;
 }
 
+function formatMedicationLabel(med: {
+  name: string;
+  dosageAmount: number | null;
+  dosageUnit: string | null;
+  dosage: string | null;
+}): string {
+  if (med.dosageAmount && med.dosageUnit) {
+    return `${med.name} ${med.dosageAmount} ${med.dosageUnit}`;
+  }
+  if (med.dosage) {
+    return `${med.name} ${med.dosage}`;
+  }
+  return med.name;
+}
+
 export async function generatePlanTasks(input: GenerateTasksInput) {
   const { cycleId, protocolPlanId, userTimezone, quietHours } = input;
 
@@ -23,6 +38,7 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
     where: { id: protocolPlanId },
     include: {
       medications: true,
+      appointments: true,
       milestones: true,
     },
   });
@@ -77,6 +93,7 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
       summary: null,
     });
 
+    // Generate medication tasks
     for (const med of protocol.medications) {
       const medStartDay = med.startDayOffset;
       const medEndDay = med.startDayOffset + med.durationDays - 1;
@@ -85,7 +102,7 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
         let dueAt = createDueAtTime(
           date,
           med.timeOfDay,
-          med.customTime,
+          med.exactTime,
           userTimezone
         );
 
@@ -95,14 +112,16 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
           tasks.push({
             planDayDate: fromZonedTime(date, userTimezone),
             kind: "REMINDER",
-            label: med.dosage
-              ? `${med.name} ${med.dosage}`
-              : med.name,
+            label: formatMedicationLabel(med),
             dueAt,
             meta: {
               medicationId: med.id,
               medicationName: med.name,
+              dosageAmount: med.dosageAmount,
+              dosageUnit: med.dosageUnit,
               dosage: med.dosage,
+              frequency: med.frequency,
+              route: med.route,
               instructions: med.instructions,
             },
           });
@@ -110,6 +129,36 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
       }
     }
 
+    // Generate appointment tasks
+    for (const apt of protocol.appointments) {
+      if (cycleDayIndex === apt.dayOffset) {
+        const aptTime = createDueAtTime(
+          date,
+          apt.critical ? null : "morning",
+          apt.exactTime,
+          userTimezone
+        );
+
+        if (aptTime > new Date()) {
+          const aptLabel = getAppointmentLabel(apt.type);
+          tasks.push({
+            planDayDate: fromZonedTime(date, userTimezone),
+            kind: apt.critical ? "CRITICAL" : "APPOINTMENT",
+            label: apt.fasting ? `${aptLabel} (fasting)` : aptLabel,
+            dueAt: aptTime,
+            meta: {
+              appointmentId: apt.id,
+              type: apt.type,
+              notes: apt.notes,
+              fasting: apt.fasting,
+              critical: apt.critical,
+            },
+          });
+        }
+      }
+    }
+
+    // Generate milestone tasks
     for (const milestone of protocol.milestones) {
       if (cycleDayIndex === milestone.dayOffset) {
         const milestoneTime = createDueAtTime(
@@ -135,6 +184,7 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
       }
     }
 
+    // Generate daily check-in task
     const checkinTime = createDueAtTime(
       date,
       null,
@@ -199,4 +249,18 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
     planDaysCreated: planDays.length,
     tasksCreated: tasks.length,
   };
+}
+
+function getAppointmentLabel(type: string): string {
+  const labels: Record<string, string> = {
+    BLOODWORK: "Bloodwork",
+    ULTRASOUND: "Ultrasound",
+    MONITORING: "Monitoring (BW + US)",
+    TRIGGER: "Trigger Shot",
+    RETRIEVAL: "Egg Retrieval",
+    TRANSFER: "Embryo Transfer",
+    CONSULTATION: "Consultation",
+    OTHER: "Appointment",
+  };
+  return labels[type] || type;
 }

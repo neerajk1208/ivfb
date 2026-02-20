@@ -41,6 +41,7 @@ export async function getActiveCycle(userId: string) {
       protocol: {
         include: {
           medications: true,
+          appointments: true,
           milestones: true,
         },
       },

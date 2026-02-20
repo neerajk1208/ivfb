@@ -23,6 +23,7 @@ export async function GET() {
       notes: cycle.protocol.notes,
       structuredData: cycle.protocol.structuredData,
       medications: cycle.protocol.medications,
+      appointments: cycle.protocol.appointments,
       milestones: cycle.protocol.milestones,
     });
   } catch (error) {

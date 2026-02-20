@@ -19,6 +19,9 @@ export async function saveProtocolPlanDraft(input: SaveProtocolDraftInput) {
     await prisma.medication.deleteMany({
       where: { protocolPlanId: existingPlan.id },
     });
+    await prisma.appointment.deleteMany({
+      where: { protocolPlanId: existingPlan.id },
+    });
     await prisma.milestone.deleteMany({
       where: { protocolPlanId: existingPlan.id },
     });
@@ -43,16 +46,30 @@ export async function saveProtocolPlanDraft(input: SaveProtocolDraftInput) {
       medications: {
         create: extraction.medications.map((med) => ({
           name: med.name,
+          dosageAmount: med.dosageAmount,
+          dosageUnit: med.dosageUnit,
           dosage: med.dosage,
+          frequency: med.frequency || "once_daily",
+          route: med.route,
           startDayOffset: med.startDayOffset,
           durationDays: med.durationDays,
           timeOfDay: med.timeOfDay,
-          customTime: med.customTime,
+          exactTime: med.exactTime,
           instructions: med.instructions,
         })),
       },
+      appointments: {
+        create: (extraction.appointments || []).map((apt) => ({
+          type: apt.type,
+          dayOffset: apt.dayOffset,
+          exactTime: apt.exactTime,
+          notes: apt.notes,
+          fasting: apt.fasting || false,
+          critical: apt.critical || false,
+        })),
+      },
       milestones: {
-        create: extraction.milestones.map((ms) => ({
+        create: (extraction.milestones || []).map((ms) => ({
           type: ms.type,
           dayOffset: ms.dayOffset,
           label: ms.label,
@@ -62,6 +79,7 @@ export async function saveProtocolPlanDraft(input: SaveProtocolDraftInput) {
     },
     include: {
       medications: true,
+      appointments: true,
       milestones: true,
     },
   });
@@ -75,35 +93,49 @@ export async function activateProtocolPlan(protocolPlanId: string) {
     data: { status: "ACTIVE" },
     include: {
       medications: true,
+      appointments: true,
       milestones: true,
       cycle: true,
     },
   });
 }
 
+export interface MedicationInput {
+  name: string;
+  dosageAmount?: number | null;
+  dosageUnit?: string | null;
+  dosage?: string | null;
+  frequency?: string | null;
+  route?: string | null;
+  startDayOffset: number;
+  durationDays: number;
+  timeOfDay?: string | null;
+  exactTime?: string | null;
+  instructions?: string | null;
+}
+
+export interface AppointmentInput {
+  type: string;
+  dayOffset: number;
+  exactTime?: string | null;
+  notes?: string | null;
+  fasting?: boolean;
+  critical?: boolean;
+}
+
 export async function updateProtocolPlanFromReview(
   protocolPlanId: string,
   data: {
     cycleStartDate: string;
-    medications: Array<{
-      name: string;
-      dosage?: string | null;
-      startDayOffset: number;
-      durationDays: number;
-      timeOfDay?: string | null;
-      customTime?: string | null;
-      instructions?: string | null;
-    }>;
-    milestones?: Array<{
-      type: string;
-      dayOffset: number;
-      label?: string | null;
-      details?: string | null;
-    }>;
+    medications: MedicationInput[];
+    appointments?: AppointmentInput[];
     notes?: string | null;
   }
 ) {
   await prisma.medication.deleteMany({
+    where: { protocolPlanId },
+  });
+  await prisma.appointment.deleteMany({
     where: { protocolPlanId },
   });
   await prisma.milestone.deleteMany({
@@ -122,7 +154,7 @@ export async function updateProtocolPlanFromReview(
     ...(existingPlan.structuredData as any),
     cycleStartDate: data.cycleStartDate,
     medications: data.medications,
-    milestones: data.milestones || [],
+    appointments: data.appointments || [],
     notes: data.notes,
   };
 
@@ -135,25 +167,32 @@ export async function updateProtocolPlanFromReview(
       medications: {
         create: data.medications.map((med) => ({
           name: med.name,
+          dosageAmount: med.dosageAmount || null,
+          dosageUnit: med.dosageUnit || null,
           dosage: med.dosage || null,
+          frequency: med.frequency || "once_daily",
+          route: med.route || null,
           startDayOffset: med.startDayOffset,
           durationDays: med.durationDays,
           timeOfDay: med.timeOfDay || null,
-          customTime: med.customTime || null,
+          exactTime: med.exactTime || null,
           instructions: med.instructions || null,
         })),
       },
-      milestones: {
-        create: (data.milestones || []).map((ms) => ({
-          type: ms.type,
-          dayOffset: ms.dayOffset,
-          label: ms.label || null,
-          details: ms.details || null,
+      appointments: {
+        create: (data.appointments || []).map((apt) => ({
+          type: apt.type,
+          dayOffset: apt.dayOffset,
+          exactTime: apt.exactTime || null,
+          notes: apt.notes || null,
+          fasting: apt.fasting || false,
+          critical: apt.critical || false,
         })),
       },
     },
     include: {
       medications: true,
+      appointments: true,
       milestones: true,
     },
   });

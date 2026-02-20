@@ -69,21 +69,41 @@ model ProtocolPlan {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  cycle       Cycle       @relation(fields: [cycleId], references: [id])
-  medications Medication[]
-  milestones  Milestone[]
+  cycle        Cycle         @relation(fields: [cycleId], references: [id])
+  medications  Medication[]
+  appointments Appointment[]
+  milestones   Milestone[]
 }
 
 model Medication {
   id             String  @id @default(cuid())
   protocolPlanId String
   name           String
+  dosageAmount   Float?
+  dosageUnit     String?
   dosage         String?
+  frequency      String  @default("once_daily")
+  route          String?
   startDayOffset Int
   durationDays   Int
   timeOfDay      String?
-  customTime     String?
+  exactTime      String?
   instructions   String?
+
+  protocolPlan ProtocolPlan @relation(fields: [protocolPlanId], references: [id], onDelete: Cascade)
+}
+
+model Appointment {
+  id             String   @id @default(cuid())
+  protocolPlanId String
+  type           String
+  dayOffset      Int
+  exactTime      String?
+  duration       Int?
+  location       String?
+  notes          String?
+  fasting        Boolean  @default(false)
+  critical       Boolean  @default(false)
 
   protocolPlan ProtocolPlan @relation(fields: [protocolPlanId], references: [id], onDelete: Cascade)
 }

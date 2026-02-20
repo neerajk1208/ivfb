@@ -36,15 +36,20 @@ export async function POST(request: NextRequest) {
       cycleStartDate: parsed.data.cycleStartDate,
       medications: parsed.data.medications.map((m) => ({
         name: m.name,
+        dosageAmount: null,
+        dosageUnit: null,
         dosage: m.dosage || null,
+        frequency: "once_daily",
+        route: null,
         startDayOffset: m.startDayOffset,
         durationDays: m.durationDays,
-        timeOfDay: (m.timeOfDay as any) || null,
-        customTime: m.customTime || null,
+        timeOfDay: (m.timeOfDay as "morning" | "afternoon" | "evening" | "bedtime") || null,
+        exactTime: m.customTime || null,
         instructions: m.instructions || null,
       })),
+      appointments: [],
       milestones: (parsed.data.milestones || []).map((ms) => ({
-        type: ms.type,
+        type: ms.type as "CYCLE_START" | "STIM_START" | "TRIGGER" | "RETRIEVAL" | "TRANSFER" | "PREG_TEST" | "OTHER",
         dayOffset: ms.dayOffset,
         label: ms.label || null,
         details: ms.details || null,
@@ -53,7 +58,7 @@ export async function POST(request: NextRequest) {
       confidence: {
         cycleStartDate: "high",
         medications: "high",
-        milestones: "high",
+        appointments: "high",
       },
       missingFields: [],
     };
