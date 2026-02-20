@@ -66,6 +66,7 @@ export default function SettingsPage() {
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
   const [pushError, setPushError] = useState("");
+  const [isSendingTestPush, setIsSendingTestPush] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -335,6 +336,38 @@ export default function SettingsPage() {
                 </div>
                 {pushError && (
                   <p className="text-sm text-destructive">{pushError}</p>
+                )}
+
+                {pushEnabled && (
+                  <div className="pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      disabled={isSendingTestPush}
+                      onClick={async () => {
+                        setIsSendingTestPush(true);
+                        setMessage("");
+                        try {
+                          const res = await fetch("/api/test/push", { method: "POST" });
+                          const data = await res.json();
+                          if (res.ok) {
+                            setMessage("Test push sent! Check your notifications.");
+                          } else {
+                            setMessage(data.error || "Failed to send test push");
+                          }
+                        } catch {
+                          setMessage("Failed to send test push");
+                        } finally {
+                          setIsSendingTestPush(false);
+                        }
+                      }}
+                    >
+                      {isSendingTestPush ? "Sending..." : "Send Test Push"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      Send a test notification to verify push is working
+                    </p>
+                  </div>
                 )}
               </>
             ) : (
