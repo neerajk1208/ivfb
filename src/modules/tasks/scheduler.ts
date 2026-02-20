@@ -1,11 +1,13 @@
 import { getDueTasks, markTaskSent } from "./taskService";
 import { sendSms } from "@/modules/messaging/messagingService";
 import { createChatMessage } from "@/modules/chat/chatService";
+import { sendPushToUser } from "@/modules/push/pushService";
 import type { MessageType } from "@/modules/chat/chatService";
 
 export interface TickResult {
   processed: number;
-  sent: number;
+  smsSent: number;
+  pushSent: number;
   chatCreated: number;
   failed: number;
   errors: string[];
@@ -84,10 +86,49 @@ function formatSmsMessage(task: any): string {
   return `📋 ${task.label}`;
 }
 
+function formatPushNotification(task: any): { title: string; body: string; tag: string } {
+  const meta = task.meta as any;
+
+  if (task.kind === "REMINDER") {
+    return {
+      title: "💊 Medication Reminder",
+      body: task.label,
+      tag: `reminder-${task.id}`,
+    };
+  }
+
+  if (task.kind === "CHECKIN") {
+    return {
+      title: "💛 Check-in Time",
+      body: "How are you feeling today? Tap to log your mood.",
+      tag: `checkin-${task.id}`,
+    };
+  }
+
+  if (task.kind === "APPOINTMENT" || task.kind === "CRITICAL") {
+    let body = task.label;
+    if (meta?.fasting) {
+      body += " (fasting required)";
+    }
+    return {
+      title: "📅 Appointment Reminder",
+      body,
+      tag: `appointment-${task.id}`,
+    };
+  }
+
+  return {
+    title: "IVF Buddy",
+    body: task.label,
+    tag: `task-${task.id}`,
+  };
+}
+
 export async function runSchedulerTick(): Promise<TickResult> {
   const result: TickResult = {
     processed: 0,
-    sent: 0,
+    smsSent: 0,
+    pushSent: 0,
     chatCreated: 0,
     failed: 0,
     errors: [],
@@ -101,7 +142,6 @@ export async function runSchedulerTick(): Promise<TickResult> {
       const user = task.cycle.user;
 
       try {
-        // Always create a chat message
         const chatContent = formatChatMessage(task);
         const messageType = getMessageTypeFromTaskKind(task.kind);
 
@@ -115,7 +155,16 @@ export async function runSchedulerTick(): Promise<TickResult> {
         });
         result.chatCreated++;
 
-        // Also send SMS if user has consent and phone
+        const pushPayload = formatPushNotification(task);
+        const pushResult = await sendPushToUser(user.id, {
+          ...pushPayload,
+          url: "/chat",
+        });
+        result.pushSent += pushResult.sent;
+        if (pushResult.errors.length > 0) {
+          result.errors.push(...pushResult.errors.map((e) => `Push: ${e}`));
+        }
+
         if (user.phoneE164 && user.smsConsent) {
           const smsBody = formatSmsMessage(task);
           const smsResult = await sendSms({
@@ -125,14 +174,12 @@ export async function runSchedulerTick(): Promise<TickResult> {
           });
 
           if (smsResult.success) {
-            result.sent++;
+            result.smsSent++;
           } else {
-            // SMS failed but chat was created - don't count as full failure
             result.errors.push(`SMS for task ${task.id}: ${smsResult.error}`);
           }
         }
 
-        // Mark task as sent (chat message was created)
         await markTaskSent(task.id);
       } catch (error) {
         result.failed++;

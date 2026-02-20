@@ -20,12 +20,13 @@ model User {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  cycles       Cycle[]
-  uploads      Upload[]
-  checkIns     CheckIn[]
-  messages     MessageLog[]
-  chatMessages ChatMessage[]
-  convoStates  ConversationState[]
+  cycles            Cycle[]
+  uploads           Upload[]
+  checkIns          CheckIn[]
+  messages          MessageLog[]
+  chatMessages      ChatMessage[]
+  convoStates       ConversationState[]
+  pushSubscriptions PushSubscription[]
 }
 
 model Cycle {
@@ -207,4 +208,17 @@ model ChatMessage {
   cycle Cycle @relation(fields: [cycleId], references: [id])
 
   @@index([userId, cycleId, createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -24,6 +25,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Bell, BellOff } from "lucide-react";
 
 const COMMON_TIMEZONES = [
   { value: "America/New_York", label: "Eastern Time (ET)" },
@@ -60,6 +62,11 @@ export default function SettingsPage() {
   const [message, setMessage] = useState("");
   const [isSendingTest, setIsSendingTest] = useState(false);
 
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushError, setPushError] = useState("");
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
@@ -68,8 +75,28 @@ export default function SettingsPage() {
 
     if (status === "authenticated") {
       fetchSettings();
+      checkPushSupport();
     }
   }, [status, router]);
+
+  const checkPushSupport = async () => {
+    if (typeof window === "undefined") return;
+    
+    const supported = "serviceWorker" in navigator && "PushManager" in window;
+    setPushSupported(supported);
+    
+    if (supported) {
+      try {
+        const res = await fetch("/api/push/status");
+        const data = await res.json();
+        if (res.ok && data.data) {
+          setPushEnabled(data.data.enabled);
+        }
+      } catch (err) {
+        console.error("Failed to check push status:", err);
+      }
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -83,6 +110,67 @@ export default function SettingsPage() {
       console.error("Failed to load settings:", err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const togglePushNotifications = async () => {
+    if (!pushSupported) return;
+    
+    setPushLoading(true);
+    setPushError("");
+
+    try {
+      if (pushEnabled) {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        
+        if (subscription) {
+          await fetch("/api/push/subscribe", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: subscription.endpoint }),
+          });
+          await subscription.unsubscribe();
+        }
+        
+        setPushEnabled(false);
+        setMessage("Push notifications disabled");
+      } else {
+        const permission = await Notification.requestPermission();
+        
+        if (permission !== "granted") {
+          setPushError("Permission denied. Please enable notifications in your browser settings.");
+          return;
+        }
+
+        const registration = await navigator.serviceWorker.ready;
+        
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(
+            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ""
+          ),
+        });
+
+        const res = await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(subscription.toJSON()),
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to save subscription");
+        }
+
+        setPushEnabled(true);
+        setMessage("Push notifications enabled");
+      }
+    } catch (err) {
+      console.error("Push toggle error:", err);
+      setPushError(err instanceof Error ? err.message : "Failed to toggle notifications");
+    } finally {
+      setPushLoading(false);
+      setTimeout(() => setMessage(""), 3000);
     }
   };
 
@@ -213,9 +301,56 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Notifications</CardTitle>
+            <CardTitle className="text-lg">Push Notifications</CardTitle>
             <CardDescription>
-              Manage your SMS reminders and check-ins
+              Receive reminders directly on your device
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {pushSupported ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    {pushEnabled ? (
+                      <Bell className="h-5 w-5 text-primary" />
+                    ) : (
+                      <BellOff className="h-5 w-5 text-muted-foreground" />
+                    )}
+                    <div>
+                      <p className="font-medium">
+                        {pushEnabled ? "Notifications On" : "Notifications Off"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {pushEnabled
+                          ? "You'll receive push notifications"
+                          : "Enable to receive reminders"}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={pushEnabled}
+                    onCheckedChange={togglePushNotifications}
+                    disabled={pushLoading}
+                  />
+                </div>
+                {pushError && (
+                  <p className="text-sm text-destructive">{pushError}</p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Push notifications are not supported on this device/browser.
+                Try adding this app to your home screen first.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">SMS Notifications</CardTitle>
+            <CardDescription>
+              Receive SMS reminders (requires phone number)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -301,7 +436,7 @@ export default function SettingsPage() {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                No SMS will be sent during these hours
+                No notifications will be sent during these hours
               </p>
             </div>
 
@@ -396,4 +531,15 @@ export default function SettingsPage() {
       </div>
     </div>
   );
+}
+
+function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray.buffer as ArrayBuffer;
 }

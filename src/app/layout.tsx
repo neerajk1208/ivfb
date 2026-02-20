@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { SessionProvider } from "@/components/providers/SessionProvider";
+import { ServiceWorkerProvider } from "@/components/providers/ServiceWorkerProvider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -48,10 +49,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background`}
       >
         <SessionProvider>
-          <main className="min-h-screen">
-            {children}
-          </main>
-          <Toaster position="top-center" />
+          <ServiceWorkerProvider>
+            <main className="min-h-screen">
+              {children}
+            </main>
+            <Toaster position="top-center" />
+          </ServiceWorkerProvider>
         </SessionProvider>
       </body>
     </html>
