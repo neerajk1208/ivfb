@@ -8,21 +8,24 @@ datasource db {
 }
 
 model User {
-  id         String   @id @default(cuid())
-  email      String   @unique
-  name       String?
-  timezone   String   @default("America/Los_Angeles")
-  phoneE164  String?  @unique
-  smsConsent Boolean  @default(false)
-  quietHours Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String?
+  timezone        String   @default("America/Los_Angeles")
+  phoneE164       String?  @unique
+  smsConsent      Boolean  @default(false)
+  quietHours      Json?
+  dailyMsgCount   Int      @default(0)
+  lastMsgDate     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  cycles      Cycle[]
-  uploads     Upload[]
-  checkIns    CheckIn[]
-  messages    MessageLog[]
-  convoStates ConversationState[]
+  cycles       Cycle[]
+  uploads      Upload[]
+  checkIns     CheckIn[]
+  messages     MessageLog[]
+  chatMessages ChatMessage[]
+  convoStates  ConversationState[]
 }
 
 model Cycle {
@@ -33,12 +36,13 @@ model Cycle {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user       User               @relation(fields: [userId], references: [id])
-  protocol   ProtocolPlan?
-  planDays   PlanDay[]
-  tasks      Task[]
-  checkIns   CheckIn[]
-  convoState ConversationState?
+  user         User               @relation(fields: [userId], references: [id])
+  protocol     ProtocolPlan?
+  planDays     PlanDay[]
+  tasks        Task[]
+  checkIns     CheckIn[]
+  chatMessages ChatMessage[]
+  convoState   ConversationState?
 }
 
 model Upload {
@@ -186,4 +190,21 @@ model ConversationState {
 
   user  User  @relation(fields: [userId], references: [id])
   cycle Cycle @relation(fields: [cycleId], references: [id])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  cycleId   String
+  sender    String   // SYSTEM, USER, BUDDY
+  type      String   // REMINDER, CHECKIN, APPOINTMENT, INFO, MESSAGE
+  content   String
+  meta      Json?    // Extra data (medicationId, appointmentId, mood, etc.)
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  cycle Cycle @relation(fields: [cycleId], references: [id])
+
+  @@index([userId, cycleId, createdAt])
 }
