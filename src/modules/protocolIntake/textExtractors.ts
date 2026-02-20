@@ -1,49 +1,36 @@
 import * as pdfParse from "pdf-parse";
 
-export interface OCRProvider {
-  extractText(imageData: Buffer, mimeType: string): Promise<string>;
-}
-
-class BasicOCRProvider implements OCRProvider {
-  async extractText(imageData: Buffer, mimeType: string): Promise<string> {
-    // For MVP, return a placeholder. In production, use Google Vision or Tesseract
-    console.warn("OCR not configured. Using placeholder text extraction.");
-    return "[Image text extraction requires OCR configuration. Please use manual intake or PDF upload.]";
-  }
-}
-
-let ocrProvider: OCRProvider = new BasicOCRProvider();
-
-export function setOCRProvider(provider: OCRProvider): void {
-  ocrProvider = provider;
-}
-
 export async function extractTextFromPDF(pdfData: Buffer): Promise<string> {
   try {
     const pdf = (pdfParse as any).default || pdfParse;
     const data = await pdf(pdfData);
-    return data.text.trim();
+    const text = data.text.trim();
+    if (!text || text.length < 20) {
+      throw new Error("PDF appears to be empty or contains no readable text");
+    }
+    return text;
   } catch (error) {
     console.error("PDF extraction error:", error);
-    throw new Error("Failed to extract text from PDF");
+    throw new Error("Failed to extract text from PDF. The file may be image-based or corrupted.");
   }
 }
 
-export async function extractTextFromImage(
-  imageData: Buffer,
-  mimeType: string
-): Promise<string> {
-  return ocrProvider.extractText(imageData, mimeType);
+export function imageToBase64(imageData: Buffer, mimeType: string): string {
+  const base64 = imageData.toString("base64");
+  return `data:${mimeType};base64,${base64}`;
 }
 
 export async function extractTextFromFile(
   fileData: Buffer,
   mimeType: string,
   kind: "PDF" | "IMAGE"
-): Promise<string> {
+): Promise<{ type: "text"; content: string } | { type: "image"; base64: string }> {
   if (kind === "PDF" || mimeType === "application/pdf") {
-    return extractTextFromPDF(fileData);
+    const text = await extractTextFromPDF(fileData);
+    return { type: "text", content: text };
   }
 
-  return extractTextFromImage(fileData, mimeType);
+  // For images, return base64 to send directly to OpenAI Vision
+  const base64 = imageToBase64(fileData, mimeType);
+  return { type: "image", base64 };
 }

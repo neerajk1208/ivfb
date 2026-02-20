@@ -11,149 +11,157 @@ function getOpenAI(): OpenAI {
   });
 }
 
-const SYSTEM_PROMPT = `You are a careful assistant extracting structured IVF protocol plan data from clinic instructions.
+const EXTRACTION_PROMPT = `You are an expert at extracting IVF medication protocol data from clinic documents.
 
-Your task is to extract medication schedules and important milestones from the provided text.
+IMPORTANT: These documents come in many formats:
+- Calendar/grid schedules with dates and medication abbreviations
+- Text lists of medications with dosages and timing
+- Mixed formats with instructions and schedules
 
-Rules:
-1. Output MUST be valid JSON matching the provided schema exactly.
-2. Do not include any extra keys or commentary.
-3. If a field cannot be determined, set it to null and add it to missingFields.
-4. Set confidence levels based on clarity of the source text.
-5. startDayOffset is relative to cycle start (day 0 = cycle start date).
-6. durationDays must be at least 1.
-7. If time of day is mentioned (e.g., "8pm", "morning"), extract it.
-8. Keep extraction purely structural - no medical advice or interpretation.`;
+Common IVF medication abbreviations:
+- GF, Gonal-F, Follistim = FSH injection (follicle stimulating hormone)
+- Men, Menopur = Menotropin injection
+- Cetrotide, Ganirelix = GnRH antagonist
+- Estrace, E2 = Estradiol
+- Provera = Medroxyprogesterone
+- HCG, Ovidrel, Pregnyl = Trigger shot
+- BW = Bloodwork, U/S = Ultrasound (these are appointments, not medications)
+- VOR, ER = Egg Retrieval (milestone, not medication)
+- ET = Embryo Transfer (milestone)
 
-function buildUserPrompt(extractedText: string): string {
-  return `Extract the IVF protocol plan from the following text. Return ONLY valid JSON matching this schema:
+Your task:
+1. Extract ALL medications with their schedules
+2. Convert calendar dates to day offsets (day 0 = first day shown or cycle start)
+3. Identify milestones like monitoring, trigger, retrieval, transfer
+4. If something is unclear, set confidence to "low" and add to missingFields
 
+Output ONLY valid JSON matching this schema:
 ${JSON.stringify(protocolPlanExtractionJsonSchema, null, 2)}
 
-Text to extract from:
----
-${extractedText}
----
-
-Remember:
-- cycleStartDate should be YYYY-MM-DD format or null
-- startDayOffset is relative to cycle start (0 = start day)
-- If uncertain about any field, set confidence to "low" and add to missingFields
-- Do not make up information - only extract what is clearly stated`;
-}
+Rules:
+- cycleStartDate: Use the first date shown, format YYYY-MM-DD, or null if unclear
+- startDayOffset: Relative to cycle start (0 = first day)
+- durationDays: Count how many days the medication appears
+- timeOfDay: Extract if mentioned (morning, evening, etc.)
+- Do NOT include bloodwork/ultrasound as medications - those are appointments
+- Do NOT make up information - only extract what you see`;
 
 export async function extractProtocolFromText(
-  extractedText: string,
-  retryOnFailure = true
+  extractedText: string
 ): Promise<ProtocolPlanExtraction> {
-  const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  const openai = getOpenAI();
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   try {
-    const openai = getOpenAI();
-    const response = await openai.responses.create({
+    const response = await openai.chat.completions.create({
       model,
-      input: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(extractedText) },
+      messages: [
+        { role: "system", content: EXTRACTION_PROMPT },
+        { role: "user", content: `Extract the protocol from this text:\n\n${extractedText}` },
       ],
+      response_format: { type: "json_object" },
     });
 
-    const content = response.output_text;
+    const content = response.choices[0]?.message?.content;
     if (!content) {
       throw new Error("Empty response from OpenAI");
     }
 
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("No JSON found in response");
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    const validated = protocolPlanExtractionSchema.safeParse(parsed);
-
-    if (!validated.success) {
-      if (retryOnFailure) {
-        console.warn("Validation failed, retrying with correction prompt");
-        return await retryExtraction(extractedText, content, validated.error.message);
-      }
-      throw new Error(`Invalid extraction format: ${validated.error.message}`);
-    }
-
-    return validated.data;
+    return parseAndValidate(content);
   } catch (error) {
-    console.error("Protocol extraction error:", error);
-    
-    return getEmptyExtraction();
+    console.error("Text extraction error:", error);
+    return getFailedExtraction("Failed to extract from text");
   }
 }
 
-async function retryExtraction(
-  originalText: string,
-  previousResponse: string,
-  errorMessage: string
+export async function extractProtocolFromImage(
+  imageBase64: string
 ): Promise<ProtocolPlanExtraction> {
-  const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
-
-  const retryPrompt = `Your previous output did not match the required schema.
-
-Error: ${errorMessage}
-
-Previous response:
-${previousResponse}
-
-Please fix the JSON to match the schema exactly. Here is the original text again:
----
-${originalText}
----
-
-Return ONLY the corrected JSON.`;
+  const openai = getOpenAI();
 
   try {
-    const openai = getOpenAI();
-    const response = await openai.responses.create({
-      model,
-      input: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: retryPrompt },
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o", // Vision requires gpt-4o or gpt-4-turbo
+      messages: [
+        { role: "system", content: EXTRACTION_PROMPT },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Extract the IVF protocol from this image. Return JSON only." },
+            { type: "image_url", image_url: { url: imageBase64 } },
+          ],
+        },
       ],
+      max_tokens: 2000,
     });
 
-    const content = response.output_text;
+    const content = response.choices[0]?.message?.content;
     if (!content) {
-      throw new Error("Empty response from OpenAI on retry");
+      throw new Error("Empty response from OpenAI Vision");
     }
 
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("No JSON found in retry response");
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    const validated = protocolPlanExtractionSchema.safeParse(parsed);
-
-    if (!validated.success) {
-      console.error("Retry also failed validation:", validated.error.message);
-      return getEmptyExtraction();
-    }
-
-    return validated.data;
+    return parseAndValidate(content);
   } catch (error) {
-    console.error("Retry extraction error:", error);
-    return getEmptyExtraction();
+    console.error("Image extraction error:", error);
+    return getFailedExtraction("Failed to extract from image. Please try a clearer image or enter manually.");
   }
 }
 
-function getEmptyExtraction(): ProtocolPlanExtraction {
+function parseAndValidate(content: string): ProtocolPlanExtraction {
+  // Extract JSON from response (may have markdown wrapper)
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    console.error("No JSON found in response:", content);
+    return getFailedExtraction("Could not parse extraction result");
+  }
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  const validated = protocolPlanExtractionSchema.safeParse(parsed);
+
+  if (!validated.success) {
+    console.error("Validation failed:", validated.error.message);
+    // Try to salvage what we can
+    return {
+      cycleStartDate: parsed.cycleStartDate || null,
+      medications: Array.isArray(parsed.medications) ? parsed.medications : [],
+      milestones: Array.isArray(parsed.milestones) ? parsed.milestones : [],
+      notes: parsed.notes || null,
+      confidence: parsed.confidence || {
+        cycleStartDate: "low",
+        medications: "low",
+        milestones: "low",
+      },
+      missingFields: parsed.missingFields || ["validation_failed"],
+    };
+  }
+
+  // Check if extraction actually found anything
+  if (validated.data.medications.length === 0) {
+    return {
+      ...validated.data,
+      confidence: {
+        cycleStartDate: "low",
+        medications: "low",
+        milestones: "low",
+      },
+      missingFields: [...(validated.data.missingFields || []), "no_medications_found"],
+    };
+  }
+
+  return validated.data;
+}
+
+function getFailedExtraction(reason: string): ProtocolPlanExtraction {
   return {
     cycleStartDate: null,
     medications: [],
     milestones: [],
-    notes: null,
+    notes: reason,
     confidence: {
       cycleStartDate: "low",
       medications: "low",
       milestones: "low",
     },
-    missingFields: ["cycleStartDate", "medications", "milestones"],
+    missingFields: ["extraction_failed"],
   };
 }
