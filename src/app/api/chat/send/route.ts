@@ -8,10 +8,17 @@ import {
   parseJsonBody,
 } from "@/lib/http";
 import { sendUserMessage, checkDailyLimit } from "@/modules/chat/chatService";
+import { hasActiveSubscription } from "@/lib/stripe";
 
 export async function POST(request: NextRequest) {
   try {
     const user = await requireUser();
+    
+    const isSubscribed = await hasActiveSubscription(user.id);
+    if (!isSubscribed) {
+      return errorResponse("Subscription required to use chat", 403);
+    }
+
     const cycle = await getActiveCycle(user.id);
 
     if (!cycle) {

@@ -1,8 +1,8 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, Pill, Calendar, AlertCircle, CalendarPlus } from "lucide-react";
+import { Paywall } from "@/components/Paywall";
 
 interface Medication {
   id: string;
@@ -105,9 +106,10 @@ function generateId(): string {
   return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-export default function ReviewPage() {
+function ReviewPageContent() {
   const { status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [protocol, setProtocol] = useState<ProtocolData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -116,6 +118,8 @@ export default function ReviewPage() {
   const [activeTab, setActiveTab] = useState<"medications" | "appointments">("medications");
   const [showCalendarStep, setShowCalendarStep] = useState(false);
   const [includeMedications, setIncludeMedications] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -125,8 +129,28 @@ export default function ReviewPage() {
 
     if (status === "authenticated") {
       fetchProtocol();
+      checkSubscription();
+      
+      const checkoutStatus = searchParams.get("checkout");
+      if (checkoutStatus === "success") {
+        setIsSubscribed(true);
+        setShowPaywall(false);
+        window.history.replaceState({}, "", "/onboarding/review");
+      }
     }
-  }, [status, router]);
+  }, [status, router, searchParams]);
+
+  const checkSubscription = async () => {
+    try {
+      const res = await fetch("/api/stripe/status");
+      const data = await res.json();
+      if (res.ok && data.data) {
+        setIsSubscribed(data.data.isActive);
+      }
+    } catch {
+      setIsSubscribed(false);
+    }
+  };
 
   const fetchProtocol = async () => {
     try {
@@ -270,6 +294,11 @@ export default function ReviewPage() {
       return;
     }
 
+    if (!isSubscribed) {
+      setShowPaywall(true);
+      return;
+    }
+
     setError("");
     setIsConfirming(true);
 
@@ -339,6 +368,29 @@ export default function ReviewPage() {
 
   if (!protocol) {
     return null;
+  }
+
+  if (showPaywall) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+        <div className="max-w-md w-full space-y-6">
+          <div className="text-center space-y-2 mb-6">
+            <h1 className="text-2xl font-semibold">Your Protocol is Ready!</h1>
+            <p className="text-muted-foreground">
+              We found {protocol.medications.length} medications and {protocol.appointments.length} appointments
+            </p>
+          </div>
+          <Paywall />
+          <Button
+            variant="ghost"
+            className="w-full"
+            onClick={() => setShowPaywall(false)}
+          >
+            Go back and edit
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   if (showCalendarStep) {
@@ -921,5 +973,13 @@ export default function ReviewPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function ReviewPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-pulse text-muted-foreground">Loading...</div></div>}>
+      <ReviewPageContent />
+    </Suspense>
   );
 }

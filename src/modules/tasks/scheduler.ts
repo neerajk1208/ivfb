@@ -2,10 +2,12 @@ import { getDueTasks, markTaskSent } from "./taskService";
 import { sendSms } from "@/modules/messaging/messagingService";
 import { createChatMessage } from "@/modules/chat/chatService";
 import { sendPushToUser } from "@/modules/push/pushService";
+import { hasActiveSubscription } from "@/lib/stripe";
 import type { MessageType } from "@/modules/chat/chatService";
 
 export interface TickResult {
   processed: number;
+  skippedNoSub: number;
   smsSent: number;
   pushSent: number;
   chatCreated: number;
@@ -249,6 +251,7 @@ function formatBundledPush(tasks: any[]): { title: string; body: string; tag: st
 export async function runSchedulerTick(): Promise<TickResult> {
   const result: TickResult = {
     processed: 0,
+    skippedNoSub: 0,
     smsSent: 0,
     pushSent: 0,
     chatCreated: 0,
@@ -277,6 +280,15 @@ export async function runSchedulerTick(): Promise<TickResult> {
     for (const tasks of tasksByUserTime.values()) {
       const user = tasks[0].cycle.user;
       const cycleId = tasks[0].cycleId;
+
+      const isSubscribed = await hasActiveSubscription(user.id);
+      if (!isSubscribed) {
+        result.skippedNoSub += tasks.length;
+        for (const task of tasks) {
+          await markTaskSent(task.id);
+        }
+        continue;
+      }
 
       try {
         const chatContent = formatBundledChatMessage(tasks);

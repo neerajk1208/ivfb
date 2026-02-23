@@ -25,7 +25,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Bell, BellOff, Calendar, CalendarCheck, CalendarX } from "lucide-react";
+import { Bell, BellOff, Calendar, CalendarCheck, CalendarX, CreditCard } from "lucide-react";
 
 const COMMON_TIMEZONES = [
   { value: "America/New_York", label: "Eastern Time (ET)" },
@@ -73,6 +73,15 @@ export default function SettingsPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [includeMedications, setIncludeMedications] = useState(false);
 
+  const [billingStatus, setBillingStatus] = useState<{
+    status: string;
+    periodEnd: string | null;
+    cardLast4: string | null;
+    freeAccess: boolean;
+    isActive: boolean;
+  } | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
@@ -83,8 +92,55 @@ export default function SettingsPage() {
       fetchSettings();
       checkPushSupport();
       checkCalendarStatus();
+      fetchBillingStatus();
     }
   }, [status, router]);
+
+  const fetchBillingStatus = async () => {
+    try {
+      const res = await fetch("/api/stripe/status");
+      const data = await res.json();
+      if (res.ok && data.data) {
+        setBillingStatus(data.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch billing status:", err);
+    }
+  };
+
+  const handleManageBilling = async () => {
+    setBillingLoading(true);
+    try {
+      const res = await fetch("/api/stripe/portal", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.data?.url) {
+        window.location.href = data.data.url;
+      } else {
+        setMessage(data.error || "Failed to open billing portal");
+      }
+    } catch {
+      setMessage("Failed to open billing portal");
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  const handleSubscribe = async () => {
+    setBillingLoading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.data?.url) {
+        window.location.href = data.data.url;
+      } else {
+        setMessage(data.error || "Failed to start checkout");
+      }
+    } catch {
+      setMessage("Failed to start checkout");
+    } finally {
+      setBillingLoading(false);
+    }
+  };
 
   const checkPushSupport = async () => {
     if (typeof window === "undefined") return;
@@ -360,6 +416,60 @@ export default function SettingsPage() {
                 <p className="text-sm">{settings.name}</p>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Subscription</CardTitle>
+            <CardDescription>
+              Manage your IVF Buddy subscription
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <CreditCard className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-medium">
+                    {billingStatus?.freeAccess
+                      ? "Free Access"
+                      : billingStatus?.isActive
+                      ? "Active"
+                      : "Not Subscribed"}
+                  </p>
+                  {billingStatus?.cardLast4 && (
+                    <p className="text-xs text-muted-foreground">
+                      Card ending in {billingStatus.cardLast4}
+                    </p>
+                  )}
+                  {billingStatus?.periodEnd && billingStatus.isActive && !billingStatus.freeAccess && (
+                    <p className="text-xs text-muted-foreground">
+                      Next billing: {new Date(billingStatus.periodEnd).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {billingStatus?.isActive && !billingStatus?.freeAccess ? (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleManageBilling}
+                disabled={billingLoading}
+              >
+                {billingLoading ? "Loading..." : "Manage Billing"}
+              </Button>
+            ) : !billingStatus?.freeAccess ? (
+              <Button
+                className="w-full"
+                onClick={handleSubscribe}
+                disabled={billingLoading}
+              >
+                {billingLoading ? "Loading..." : "Subscribe - $12/month"}
+              </Button>
+            ) : null}
           </CardContent>
         </Card>
 
