@@ -121,6 +121,7 @@ function ReviewPageContent() {
   const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
   const [shouldAutoConfirm, setShouldAutoConfirm] = useState(false);
+  const [autoConfirmStatus, setAutoConfirmStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -146,12 +147,16 @@ function ReviewPageContent() {
   useEffect(() => {
     if (shouldAutoConfirm && protocol && isSubscribed && !isConfirming) {
       setShouldAutoConfirm(false);
+      setAutoConfirmStatus("confirming");
       handleConfirmAfterPayment();
     }
   }, [shouldAutoConfirm, protocol, isSubscribed, isConfirming]);
 
   const handleConfirmAfterPayment = async () => {
-    if (!protocol) return;
+    if (!protocol) {
+      setAutoConfirmStatus("error: no protocol");
+      return;
+    }
     setIsConfirming(true);
     try {
       const res = await fetch("/api/protocol/confirm", {
@@ -186,10 +191,13 @@ function ReviewPageContent() {
       });
       const data = await res.json();
       if (!res.ok) {
+        setAutoConfirmStatus(`error: ${data.error || "API error"}`);
         throw new Error(data.error || "Failed to confirm protocol");
       }
+      setAutoConfirmStatus("success");
       setShowCalendarStep(true);
     } catch (err) {
+      setAutoConfirmStatus(`catch: ${err instanceof Error ? err.message : "unknown"}`);
       setError(err instanceof Error ? err.message : "Failed to confirm protocol");
     } finally {
       setIsConfirming(false);
@@ -420,6 +428,14 @@ function ReviewPageContent() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (autoConfirmStatus === "confirming") {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Setting up your reminders...</div>
       </div>
     );
   }
@@ -1006,6 +1022,9 @@ function ReviewPageContent() {
 
         {error && (
           <p className="text-sm text-destructive text-center">{error}</p>
+        )}
+        {autoConfirmStatus && autoConfirmStatus.startsWith("error") && (
+          <p className="text-sm text-destructive text-center">Debug: {autoConfirmStatus}</p>
         )}
 
         <div className="flex gap-2">

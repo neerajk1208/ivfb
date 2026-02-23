@@ -34,9 +34,12 @@ export async function PATCH(request: NextRequest) {
       smsConsent: updatedUser.smsConsent,
       quietHours: updatedUser.quietHours,
     });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error?.code === "P2002" && error?.meta?.target?.includes("phoneE164")) {
+      return errorResponse("This phone number is already registered to another account");
     }
     console.error("Profile update error:", error);
     return serverErrorResponse();
