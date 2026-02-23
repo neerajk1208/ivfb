@@ -647,6 +647,27 @@ export default function SettingsPage() {
           {isSaving ? "Saving..." : "Save Changes"}
         </Button>
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Protocol</CardTitle>
+            <CardDescription>
+              Update your medication protocol
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => router.push("/onboarding/upload?refresh=1")}
+            >
+              Re-upload Protocol
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              Upload a new protocol document to update your medications
+            </p>
+          </CardContent>
+        </Card>
+
         <Card className="border-destructive/50">
           <CardHeader>
             <CardTitle className="text-lg text-destructive">

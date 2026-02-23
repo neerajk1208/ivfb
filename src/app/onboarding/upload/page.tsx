@@ -1,8 +1,8 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -14,9 +14,11 @@ const ACCEPTED_TYPES = {
   "image/heif": "IMAGE",
 } as const;
 
-export default function UploadPage() {
+function UploadPageContent() {
   const { status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isRefresh = searchParams.get("refresh") === "1";
 
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -143,15 +145,21 @@ export default function UploadPage() {
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
       <div className="max-w-md w-full space-y-6">
         <div className="text-center space-y-2">
-          <h1 className="text-2xl font-semibold">Upload Your Protocol</h1>
+          <h1 className="text-2xl font-semibold">
+            {isRefresh ? "Update Your Protocol" : "Upload Your Protocol"}
+          </h1>
           <p className="text-muted-foreground">
-            Upload your clinic&apos;s medication plan
+            {isRefresh
+              ? "Upload a new document to update your medications"
+              : "Upload your clinic's medication plan"}
           </p>
         </div>
 
         <Card className="border shadow-sm">
           <CardHeader>
-            <CardTitle className="text-lg">Upload Document</CardTitle>
+            <CardTitle className="text-lg">
+              {isRefresh ? "Upload New Document" : "Upload Document"}
+            </CardTitle>
             <CardDescription>
               PDF or photo of your protocol instructions
             </CardDescription>
@@ -266,5 +274,13 @@ export default function UploadPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function UploadPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-pulse text-muted-foreground">Loading...</div></div>}>
+      <UploadPageContent />
+    </Suspense>
   );
 }
