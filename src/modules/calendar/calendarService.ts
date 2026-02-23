@@ -186,6 +186,15 @@ export async function syncToCalendar(
   const timezone = user?.timezone || "America/Los_Angeles";
 
   if (options.includeMedications) {
+    const timeOfDayToHour: Record<string, [number, number]> = {
+      morning: [8, 0],
+      afternoon: [13, 0],
+      evening: [18, 0],
+      bedtime: [21, 0],
+    };
+
+    const medsByDateTime: Map<string, { meds: typeof protocol.medications; dateTime: Date }> = new Map();
+
     for (const med of protocol.medications) {
       for (let day = 0; day < med.durationDays; day++) {
         const medDate = new Date(protocol.cycleStartDate);
@@ -198,13 +207,7 @@ export async function syncToCalendar(
           startHour = h;
           startMinute = m;
         } else if (med.timeOfDay) {
-          const times: Record<string, [number, number]> = {
-            morning: [8, 0],
-            afternoon: [13, 0],
-            evening: [18, 0],
-            bedtime: [21, 0],
-          };
-          const t = times[med.timeOfDay];
+          const t = timeOfDayToHour[med.timeOfDay];
           if (t) {
             startHour = t[0];
             startMinute = t[1];
@@ -214,27 +217,48 @@ export async function syncToCalendar(
         const startDateTime = new Date(medDate);
         startDateTime.setHours(startHour, startMinute, 0, 0);
 
-        const endDateTime = new Date(startDateTime);
-        endDateTime.setMinutes(startDateTime.getMinutes() + 15);
-
-        let summary = `💊 ${med.name}`;
-        if (med.dosageAmount && med.dosageUnit) {
-          summary += ` ${med.dosageAmount} ${med.dosageUnit}`;
-        }
-
-        const event: CalendarEvent = {
-          summary,
-          description: med.instructions || undefined,
-          start: { dateTime: startDateTime.toISOString(), timeZone: timezone },
-          end: { dateTime: endDateTime.toISOString(), timeZone: timezone },
-        };
-
-        const created = await createCalendarEvent(accessToken, event);
-        if (created) {
-          result.synced++;
+        const key = startDateTime.toISOString();
+        const existing = medsByDateTime.get(key);
+        if (existing) {
+          existing.meds.push(med);
         } else {
-          result.failed++;
+          medsByDateTime.set(key, { meds: [med], dateTime: startDateTime });
         }
+      }
+    }
+
+    for (const { meds, dateTime } of medsByDateTime.values()) {
+      const endDateTime = new Date(dateTime);
+      endDateTime.setMinutes(dateTime.getMinutes() + 15);
+
+      const medList = meds.map((m) => {
+        let label = m.name;
+        if (m.dosageAmount && m.dosageUnit) {
+          label += ` ${m.dosageAmount} ${m.dosageUnit}`;
+        }
+        return label;
+      });
+
+      const summary = meds.length === 1
+        ? `💊 ${medList[0]}`
+        : `💊 Medications (${meds.length})`;
+
+      const description = meds.length > 1
+        ? medList.map((l) => `• ${l}`).join("\n")
+        : meds[0].instructions || undefined;
+
+      const event: CalendarEvent = {
+        summary,
+        description,
+        start: { dateTime: dateTime.toISOString(), timeZone: timezone },
+        end: { dateTime: endDateTime.toISOString(), timeZone: timezone },
+      };
+
+      const created = await createCalendarEvent(accessToken, event);
+      if (created) {
+        result.synced++;
+      } else {
+        result.failed++;
       }
     }
   }

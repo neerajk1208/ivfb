@@ -63,41 +63,56 @@ const EXTRACTION_PROMPT = `You are an expert IVF nurse extracting medication pro
 
 ## EXTRACTION RULES:
 
-1. **Dates**: 
-   - Day 0 = first date shown on calendar
+1. **Dates & Cycle Start**: 
+   - IMPORTANT: Day 0 = the FIRST date that has ANY content (medication checkmarks, doses, appointments, or any data)
+   - Do NOT use empty columns as Day 0 - skip them
+   - If calendar shows Feb 5-19 but Feb 5-6 columns are empty, and first medication/appointment is on Feb 7, then Feb 7 is Day 0
+   - Look at the grid carefully: which column has the FIRST checkmark, number, or appointment marker?
    - Count consecutive days the medication appears for durationDays
-   - If calendar shows Feb 5-19, first date Feb 5 is day 0
 
-2. **Dosages**:
+2. **Reading Calendar Grids**:
+   - Medications are usually listed in ROWS on the left
+   - Dates are usually COLUMNS across the top
+   - A checkmark (✓, X, or filled box) in a cell means that medication is taken on that date
+   - Match each row's content to the correct column's date
+   - BW, U/S, appointments are usually at the TOP or BOTTOM of the grid
+
+3. **Dosages**:
    - Extract numeric amount separately (e.g., 225)
    - Extract unit separately (e.g., IU, mg, mL)
    - If unclear, put full string in "dosage" field
 
-3. **Times**:
+4. **Times**:
    - Morning meds usually taken 7-9 AM
    - Evening meds usually taken 7-10 PM
    - TRIGGER SHOTS have exact times (e.g., "10:00 PM") - this is CRITICAL
    - Use 24-hour format: "22:00" not "10:00 PM"
 
-4. **Routes**:
+5. **Routes**:
    - Most IVF injectables are subcutaneous
    - PIO (progesterone in oil) is intramuscular
    - Pills are oral
    - Suppositories/inserts are vaginal
 
-5. **Appointments**:
-   - Mark RETRIEVAL and TRANSFER as critical=true
-   - Mark TRIGGER as critical=true
-   - Bloodwork is often fasting=true if early morning
+6. **Appointments - TYPES MATTER**:
+   - BW alone = BLOODWORK
+   - U/S alone = ULTRASOUND  
+   - BW + U/S or "Monitoring" = MONITORING (combined visit)
+   - VOR, ER, "Retrieval" = RETRIEVAL (critical=true)
+   - ET, "Transfer" = TRANSFER (critical=true)
+   - Trigger = TRIGGER (critical=true)
+   - Do NOT default everything to MONITORING - read what each appointment actually says
 
 ## OUTPUT FORMAT:
 Return ONLY valid JSON matching this schema:
 ${JSON.stringify(protocolPlanExtractionJsonSchema, null, 2)}
 
 ## CRITICAL REMINDERS:
+- CYCLE START: First date with ACTUAL content, NOT first visible date if empty
 - Count the ACTUAL number of days a medication appears (don't assume)
 - Extract EXACT trigger time if shown
 - BW/U/S are appointments, not medications
+- APPOINTMENT TYPES: Read carefully - BW=BLOODWORK, U/S=ULTRASOUND, both=MONITORING, VOR/ER=RETRIEVAL, ET=TRANSFER
 - If you can't determine something, set confidence to "low" and add to missingFields
 - Do NOT make up information - only extract what you clearly see`;
 
@@ -158,17 +173,37 @@ export async function extractProtocolFromImage(
           content: [
             { 
               type: "text", 
-              text: `Carefully analyze this IVF protocol calendar/document. 
-              
-Look at EACH day and EACH medication row. Count exactly how many days each medication is marked.
+              text: `Carefully analyze this IVF protocol calendar/document.
 
-For calendar formats:
-- Identify the date range shown
-- For each medication row, count the days with checkmarks or doses
-- Note any dosage changes mid-cycle
-- Extract bloodwork (BW) and ultrasound (U/S) appointments
-- Find the trigger shot time (usually an exact time like 10:00 PM)
-- Identify egg retrieval (VOR/ER) date
+STEP 1 - FIND THE TRUE CYCLE START DATE:
+- Look at the calendar grid columns (dates across the top)
+- Find the FIRST column that has ANY content (checkmarks, doses, appointments)
+- SKIP empty columns at the start - they are NOT Day 0
+- The first date with actual data is cycleStartDate (Day 0)
+
+STEP 2 - READ THE GRID STRUCTURE:
+- Medications are usually ROWS on the left side
+- Dates are COLUMNS across the top
+- A checkmark/X/filled box means that med is taken on that date
+- Carefully match each cell to its row (medication) and column (date)
+
+STEP 3 - EXTRACT MEDICATIONS:
+- For each medication row, find which columns have marks
+- startDayOffset = number of days from cycleStartDate to first mark
+- durationDays = count of consecutive days with marks
+
+STEP 4 - EXTRACT APPOINTMENTS (TYPE MATTERS!):
+- "BW" alone = type: "BLOODWORK"
+- "U/S" alone = type: "ULTRASOUND"
+- "BW + U/S" or "Monitoring" = type: "MONITORING"
+- "VOR", "ER", "Retrieval" = type: "RETRIEVAL"
+- "ET", "Transfer" = type: "TRANSFER"
+- "Trigger" with time = type: "TRIGGER"
+- Do NOT default everything to MONITORING
+
+STEP 5 - VERIFY:
+- Double-check that cycleStartDate matches first date with content
+- Verify appointment types match what's written
 
 Return JSON only.` 
             },
