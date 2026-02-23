@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -35,8 +33,6 @@ export default function OnboardingPage() {
   const router = useRouter();
 
   const [step, setStep] = useState(1);
-  const [phone, setPhone] = useState("");
-  const [smsConsent, setSmsConsent] = useState(false);
   const [timezone, setTimezone] = useState("America/Los_Angeles");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -72,33 +68,15 @@ export default function OnboardingPage() {
     );
   }
 
-  const formatPhoneE164 = (input: string): string => {
-    const digits = input.replace(/\D/g, "");
-    if (digits.length === 10) {
-      return `+1${digits}`;
-    }
-    if (digits.length === 11 && digits.startsWith("1")) {
-      return `+${digits}`;
-    }
-    if (input.startsWith("+")) {
-      return `+${digits}`;
-    }
-    return input;
-  };
-
   const handleProfileSubmit = async () => {
     setError("");
     setIsSubmitting(true);
 
     try {
-      const formattedPhone = formatPhoneE164(phone);
-      
       const res = await fetch("/api/user/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phoneE164: formattedPhone,
-          smsConsent,
           timezone,
         }),
       });
@@ -146,28 +124,14 @@ export default function OnboardingPage() {
         {step === 1 && (
           <Card className="border shadow-sm">
             <CardHeader>
-              <CardTitle className="text-lg">Your Details</CardTitle>
+              <CardTitle className="text-lg">Your Timezone</CardTitle>
               <CardDescription>
-                We&apos;ll use this to send you reminders and check-ins
+                We&apos;ll use this to send you reminders at the right time
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="(555) 123-4567"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  US/Canada format. We&apos;ll send SMS reminders here.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="timezone">Your Timezone</Label>
+                <Label htmlFor="timezone">Select your timezone</Label>
                 <Select value={timezone} onValueChange={setTimezone}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select timezone" />
@@ -182,29 +146,13 @@ export default function OnboardingPage() {
                 </Select>
               </div>
 
-              <div className="flex items-start space-x-3">
-                <Checkbox
-                  id="consent"
-                  checked={smsConsent}
-                  onCheckedChange={(checked) => setSmsConsent(checked === true)}
-                />
-                <div className="space-y-1">
-                  <Label htmlFor="consent" className="text-sm font-normal cursor-pointer">
-                    I agree to receive SMS reminders and check-ins from IVF Buddy
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    You can opt out anytime by replying STOP
-                  </p>
-                </div>
-              </div>
-
               {error && (
                 <p className="text-sm text-destructive">{error}</p>
               )}
 
               <Button
                 onClick={handleProfileSubmit}
-                disabled={!phone || !smsConsent || isSubmitting}
+                disabled={isSubmitting}
                 className="w-full"
               >
                 {isSubmitting ? "Saving..." : "Continue"}

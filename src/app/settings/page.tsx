@@ -45,8 +45,6 @@ interface UserSettings {
   email: string;
   name: string | null;
   timezone: string;
-  phoneE164: string | null;
-  smsConsent: boolean;
   quietHours: { start: string; end: string } | null;
 }
 
@@ -60,7 +58,6 @@ export default function SettingsPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState("");
-  const [isSendingTest, setIsSendingTest] = useState(false);
 
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -306,8 +303,6 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           timezone: settings.timezone,
-          phoneE164: settings.phoneE164,
-          smsConsent: settings.smsConsent,
           quietHours: settings.quietHours,
         }),
       });
@@ -346,25 +341,6 @@ export default function SettingsPage() {
     } finally {
       setIsDeleting(false);
     }
-  };
-
-  const formatPhoneForDisplay = (phone: string | null): string => {
-    if (!phone) return "";
-    if (phone.startsWith("+1") && phone.length === 12) {
-      return `(${phone.slice(2, 5)}) ${phone.slice(5, 8)}-${phone.slice(8)}`;
-    }
-    return phone;
-  };
-
-  const parsePhoneInput = (input: string): string => {
-    const digits = input.replace(/\D/g, "");
-    if (digits.length === 10) {
-      return `+1${digits}`;
-    }
-    if (digits.length === 11 && digits.startsWith("1")) {
-      return `+${digits}`;
-    }
-    return input.startsWith("+") ? input : `+${digits}`;
   };
 
   if (status === "loading" || isLoading) {
@@ -625,41 +601,12 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">SMS Notifications</CardTitle>
+            <CardTitle className="text-lg">Preferences</CardTitle>
             <CardDescription>
-              Receive SMS reminders (requires phone number)
+              Configure your notification preferences
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number</Label>
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="(555) 123-4567"
-                value={formatPhoneForDisplay(settings.phoneE164)}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    phoneE164: parsePhoneInput(e.target.value),
-                  })
-                }
-              />
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="smsConsent"
-                checked={settings.smsConsent}
-                onCheckedChange={(checked) =>
-                  setSettings({ ...settings, smsConsent: checked === true })
-                }
-              />
-              <Label htmlFor="smsConsent" className="text-sm cursor-pointer">
-                Receive SMS reminders and check-ins
-              </Label>
-            </div>
-
             <div className="space-y-2">
               <Label>Timezone</Label>
               <Select
@@ -714,36 +661,6 @@ export default function SettingsPage() {
               </div>
               <p className="text-xs text-muted-foreground">
                 No notifications will be sent during these hours
-              </p>
-            </div>
-
-            <div className="pt-4 border-t">
-              <Button
-                variant="outline"
-                className="w-full"
-                disabled={isSendingTest || !settings.smsConsent}
-                onClick={async () => {
-                  setIsSendingTest(true);
-                  setMessage("");
-                  try {
-                    const res = await fetch("/api/test/sms", { method: "POST" });
-                    const data = await res.json();
-                    if (res.ok) {
-                      setMessage("Test SMS sent! Check your phone.");
-                    } else {
-                      setMessage(data.error || "Failed to send test SMS");
-                    }
-                  } catch {
-                    setMessage("Failed to send test SMS");
-                  } finally {
-                    setIsSendingTest(false);
-                  }
-                }}
-              >
-                {isSendingTest ? "Sending..." : "Send Test SMS"}
-              </Button>
-              <p className="text-xs text-muted-foreground mt-2 text-center">
-                Send a test message to verify SMS is working
               </p>
             </div>
           </CardContent>
