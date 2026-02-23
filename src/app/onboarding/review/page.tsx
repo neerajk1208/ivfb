@@ -120,6 +120,7 @@ function ReviewPageContent() {
   const [includeMedications, setIncludeMedications] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [shouldAutoConfirm, setShouldAutoConfirm] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -129,16 +130,71 @@ function ReviewPageContent() {
 
     if (status === "authenticated") {
       fetchProtocol();
-      checkSubscription();
       
       const checkoutStatus = searchParams.get("checkout");
       if (checkoutStatus === "success") {
         setIsSubscribed(true);
         setShowPaywall(false);
+        setShouldAutoConfirm(true);
         window.history.replaceState({}, "", "/onboarding/review");
+      } else {
+        checkSubscription();
       }
     }
   }, [status, router, searchParams]);
+
+  useEffect(() => {
+    if (shouldAutoConfirm && protocol && isSubscribed && !isConfirming) {
+      setShouldAutoConfirm(false);
+      handleConfirmAfterPayment();
+    }
+  }, [shouldAutoConfirm, protocol, isSubscribed, isConfirming]);
+
+  const handleConfirmAfterPayment = async () => {
+    if (!protocol) return;
+    setIsConfirming(true);
+    try {
+      const res = await fetch("/api/protocol/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          protocolPlanId: protocol.id,
+          cycleStartDate: protocol.cycleStartDate,
+          medications: protocol.medications.map((m) => ({
+            name: m.name,
+            dosageAmount: m.dosageAmount,
+            dosageUnit: m.dosageUnit,
+            dosage: m.dosage || (m.dosageAmount && m.dosageUnit ? `${m.dosageAmount} ${m.dosageUnit}` : null),
+            frequency: m.frequency,
+            route: m.route,
+            startDayOffset: m.startDayOffset,
+            durationDays: m.durationDays,
+            timeOfDay: m.timeOfDay,
+            exactTime: m.exactTime,
+            instructions: m.instructions,
+          })),
+          appointments: protocol.appointments.map((a) => ({
+            type: a.type,
+            dayOffset: a.dayOffset,
+            exactTime: a.exactTime,
+            notes: a.notes,
+            fasting: a.fasting,
+            critical: a.critical,
+          })),
+          notes: protocol.notes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to confirm protocol");
+      }
+      setShowCalendarStep(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to confirm protocol");
+    } finally {
+      setIsConfirming(false);
+    }
+  };
 
   const checkSubscription = async () => {
     try {
@@ -146,6 +202,8 @@ function ReviewPageContent() {
       const data = await res.json();
       if (res.ok && data.data) {
         setIsSubscribed(data.data.isActive);
+      } else {
+        setIsSubscribed(false);
       }
     } catch {
       setIsSubscribed(false);

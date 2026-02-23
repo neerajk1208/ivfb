@@ -1,11 +1,7 @@
 import Stripe from "stripe";
 import { prisma } from "./db";
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-
-if (!stripeSecretKey) {
-  throw new Error("Missing Stripe secret key");
-}
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY || "";
 
 export const stripe = new Stripe(stripeSecretKey);
 
