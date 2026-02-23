@@ -1,13 +1,14 @@
 import { requireUser, getActiveCycle } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/http";
 import {
   successResponse,
   errorResponse,
   unauthorizedResponse,
   serverErrorResponse,
 } from "@/lib/http";
-import { syncAppointmentsToCalendar, isCalendarConnected } from "@/modules/calendar/calendarService";
+import { syncToCalendar, isCalendarConnected } from "@/modules/calendar/calendarService";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const user = await requireUser();
     const cycle = await getActiveCycle(user.id);
@@ -21,10 +22,14 @@ export async function POST() {
       return errorResponse("Calendar not connected");
     }
 
-    const result = await syncAppointmentsToCalendar(user.id, cycle.id);
+    const body = await parseJsonBody<{ includeMedications?: boolean }>(request);
+    const includeMedications = body?.includeMedications ?? false;
 
+    const result = await syncToCalendar(user.id, cycle.id, { includeMedications });
+
+    const itemType = includeMedications ? "events" : "appointments";
     return successResponse({
-      message: `Synced ${result.synced} appointments to Google Calendar`,
+      message: `Synced ${result.synced} ${itemType} to Google Calendar`,
       synced: result.synced,
       failed: result.failed,
     });

@@ -253,25 +253,51 @@ function parseAndValidate(content: string): ProtocolPlanExtraction {
     };
   }
 
+  // Clean medication names in validated data
+  const cleanedData = {
+    ...validated.data,
+    medications: validated.data.medications.map(med => ({
+      ...med,
+      name: cleanMedicationName(med.name),
+    })),
+  };
+
   // Check if extraction found anything useful
-  if (validated.data.medications.length === 0 && validated.data.appointments.length === 0) {
+  if (cleanedData.medications.length === 0 && cleanedData.appointments.length === 0) {
     return {
-      ...validated.data,
+      ...cleanedData,
       confidence: {
         cycleStartDate: "low",
         medications: "low",
         appointments: "low",
       },
-      missingFields: [...(validated.data.missingFields || []), "no_data_found"],
+      missingFields: [...(cleanedData.missingFields || []), "no_data_found"],
     };
   }
 
-  return validated.data;
+  return cleanedData;
+}
+
+function cleanMedicationName(name: string): string {
+  if (!name) return "Unknown";
+  
+  const trimmed = name.trim();
+  const words = trimmed.split(/\s+/);
+  
+  if (words.length >= 2) {
+    const firstWord = words[0].toLowerCase();
+    const duplicateCount = words.filter(w => w.toLowerCase() === firstWord).length;
+    if (duplicateCount === words.length) {
+      return words[0].charAt(0).toUpperCase() + words[0].slice(1).toLowerCase();
+    }
+  }
+  
+  return trimmed;
 }
 
 function normalizeMedication(med: any): any {
   return {
-    name: med.name || "Unknown",
+    name: cleanMedicationName(med.name),
     dosageAmount: typeof med.dosageAmount === "number" ? med.dosageAmount : null,
     dosageUnit: med.dosageUnit || null,
     dosage: med.dosage || null,

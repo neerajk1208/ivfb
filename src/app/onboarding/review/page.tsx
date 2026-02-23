@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -114,6 +115,7 @@ export default function ReviewPage() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"medications" | "appointments">("medications");
   const [showCalendarStep, setShowCalendarStep] = useState(false);
+  const [includeMedications, setIncludeMedications] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -317,7 +319,9 @@ export default function ReviewPage() {
   };
 
   const handleConnectCalendar = () => {
-    const returnTo = "/today?calendar=connected";
+    const returnTo = includeMedications
+      ? "/today?calendar=connected&includeMeds=1"
+      : "/today?calendar=connected";
     window.location.href = `/api/calendar/auth?returnTo=${encodeURIComponent(returnTo)}`;
   };
 
@@ -387,7 +391,18 @@ export default function ReviewPage() {
             </Card>
           )}
 
-          <div className="space-y-3">
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="includeMeds"
+                checked={includeMedications}
+                onCheckedChange={(checked) => setIncludeMedications(!!checked)}
+              />
+              <Label htmlFor="includeMeds" className="text-sm cursor-pointer">
+                Also add medication reminders
+              </Label>
+            </div>
+
             <Button onClick={handleConnectCalendar} className="w-full">
               <CalendarPlus className="w-4 h-4 mr-2" />
               Connect Google Calendar

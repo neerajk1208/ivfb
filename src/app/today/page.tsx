@@ -1,8 +1,8 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -50,9 +50,10 @@ const SYMPTOM_OPTIONS = [
   "Anxiety",
 ];
 
-export default function TodayPage() {
+function TodayPageContent() {
   const { status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [data, setData] = useState<TodayData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,6 +62,7 @@ export default function TodayPage() {
   const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkInSubmitted, setCheckInSubmitted] = useState(false);
+  const [calendarSyncMessage, setCalendarSyncMessage] = useState("");
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -70,8 +72,35 @@ export default function TodayPage() {
 
     if (status === "authenticated") {
       fetchTodayData();
+
+      const calendarConnected = searchParams.get("calendar");
+      if (calendarConnected === "connected") {
+        const includeMeds = searchParams.get("includeMeds") === "1";
+        syncCalendar(includeMeds);
+        window.history.replaceState({}, "", "/today");
+      }
     }
-  }, [status, router]);
+  }, [status, router, searchParams]);
+
+  const syncCalendar = async (includeMedications: boolean) => {
+    try {
+      const res = await fetch("/api/calendar/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ includeMedications }),
+      });
+      const result = await res.json();
+      if (res.ok) {
+        setCalendarSyncMessage(result.data?.message || "Calendar synced!");
+      } else {
+        setCalendarSyncMessage("Failed to sync calendar");
+      }
+      setTimeout(() => setCalendarSyncMessage(""), 5000);
+    } catch {
+      setCalendarSyncMessage("Failed to sync calendar");
+      setTimeout(() => setCalendarSyncMessage(""), 5000);
+    }
+  };
 
   const fetchTodayData = async () => {
     try {
@@ -197,6 +226,12 @@ export default function TodayPage() {
             </Button>
           </div>
         </div>
+
+        {calendarSyncMessage && (
+          <div className="bg-primary/10 text-primary text-sm px-4 py-2 rounded-lg text-center">
+            {calendarSyncMessage}
+          </div>
+        )}
 
         {data.tasks.length > 0 && (
           <Card>
@@ -355,5 +390,13 @@ export default function TodayPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function TodayPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-pulse text-muted-foreground">Loading...</div></div>}>
+      <TodayPageContent />
+    </Suspense>
   );
 }

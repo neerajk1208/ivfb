@@ -71,6 +71,7 @@ export default function SettingsPage() {
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [includeMedications, setIncludeMedications] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -142,7 +143,11 @@ export default function SettingsPage() {
   const handleSyncCalendar = async () => {
     setIsSyncing(true);
     try {
-      const res = await fetch("/api/calendar/sync", { method: "POST" });
+      const res = await fetch("/api/calendar/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ includeMedications }),
+      });
       const data = await res.json();
       if (res.ok) {
         setMessage(data.data?.message || "Calendar synced!");
@@ -466,22 +471,34 @@ export default function SettingsPage() {
             </div>
 
             {calendarConnected ? (
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={handleSyncCalendar}
-                  disabled={isSyncing}
-                >
-                  {isSyncing ? "Syncing..." : "Sync Now"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={handleDisconnectCalendar}
-                  disabled={calendarLoading}
-                >
-                  Disconnect
-                </Button>
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="includeMeds"
+                    checked={includeMedications}
+                    onCheckedChange={(checked) => setIncludeMedications(!!checked)}
+                  />
+                  <Label htmlFor="includeMeds" className="text-sm cursor-pointer">
+                    Include medication reminders
+                  </Label>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={handleSyncCalendar}
+                    disabled={isSyncing}
+                  >
+                    {isSyncing ? "Syncing..." : "Sync Now"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={handleDisconnectCalendar}
+                    disabled={calendarLoading}
+                  >
+                    Disconnect
+                  </Button>
+                </div>
               </div>
             ) : (
               <Button

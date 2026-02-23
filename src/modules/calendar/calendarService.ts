@@ -158,9 +158,10 @@ export async function createCalendarEvent(
   return response.json();
 }
 
-export async function syncAppointmentsToCalendar(
+export async function syncToCalendar(
   userId: string,
-  cycleId: string
+  cycleId: string,
+  options: { includeMedications?: boolean } = {}
 ): Promise<{ synced: number; failed: number }> {
   const accessToken = await getValidAccessToken(userId);
   if (!accessToken) {
@@ -174,7 +175,7 @@ export async function syncAppointmentsToCalendar(
 
   const protocol = await prisma.protocolPlan.findFirst({
     where: { cycleId, status: "ACTIVE" },
-    include: { appointments: true },
+    include: { appointments: true, medications: true },
   });
 
   if (!protocol) {
@@ -182,6 +183,61 @@ export async function syncAppointmentsToCalendar(
   }
 
   const result = { synced: 0, failed: 0 };
+  const timezone = user?.timezone || "America/Los_Angeles";
+
+  if (options.includeMedications) {
+    for (const med of protocol.medications) {
+      for (let day = 0; day < med.durationDays; day++) {
+        const medDate = new Date(protocol.cycleStartDate);
+        medDate.setDate(medDate.getDate() + med.startDayOffset + day);
+
+        let startHour = 9;
+        let startMinute = 0;
+        if (med.exactTime) {
+          const [h, m] = med.exactTime.split(":").map(Number);
+          startHour = h;
+          startMinute = m;
+        } else if (med.timeOfDay) {
+          const times: Record<string, [number, number]> = {
+            morning: [8, 0],
+            afternoon: [13, 0],
+            evening: [18, 0],
+            bedtime: [21, 0],
+          };
+          const t = times[med.timeOfDay];
+          if (t) {
+            startHour = t[0];
+            startMinute = t[1];
+          }
+        }
+
+        const startDateTime = new Date(medDate);
+        startDateTime.setHours(startHour, startMinute, 0, 0);
+
+        const endDateTime = new Date(startDateTime);
+        endDateTime.setMinutes(startDateTime.getMinutes() + 15);
+
+        let summary = `💊 ${med.name}`;
+        if (med.dosageAmount && med.dosageUnit) {
+          summary += ` ${med.dosageAmount} ${med.dosageUnit}`;
+        }
+
+        const event: CalendarEvent = {
+          summary,
+          description: med.instructions || undefined,
+          start: { dateTime: startDateTime.toISOString(), timeZone: timezone },
+          end: { dateTime: endDateTime.toISOString(), timeZone: timezone },
+        };
+
+        const created = await createCalendarEvent(accessToken, event);
+        if (created) {
+          result.synced++;
+        } else {
+          result.failed++;
+        }
+      }
+    }
+  }
 
   for (const apt of protocol.appointments) {
     const aptDate = new Date(protocol.cycleStartDate);
@@ -222,14 +278,8 @@ export async function syncAppointmentsToCalendar(
     const event: CalendarEvent = {
       summary,
       description: description || undefined,
-      start: {
-        dateTime: startDateTime.toISOString(),
-        timeZone: user?.timezone || "America/Los_Angeles",
-      },
-      end: {
-        dateTime: endDateTime.toISOString(),
-        timeZone: user?.timezone || "America/Los_Angeles",
-      },
+      start: { dateTime: startDateTime.toISOString(), timeZone: timezone },
+      end: { dateTime: endDateTime.toISOString(), timeZone: timezone },
     };
 
     const created = await createCalendarEvent(accessToken, event);
