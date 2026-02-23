@@ -125,7 +125,11 @@ export default function SettingsPage() {
   const handleSubscribe = async () => {
     setBillingLoading(true);
     try {
-      const res = await fetch("/api/stripe/checkout", { method: "POST" });
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ returnTo: "/today?checkout=success" }),
+      });
       const data = await res.json();
       if (res.ok && data.data?.url) {
         window.location.href = data.data.url;

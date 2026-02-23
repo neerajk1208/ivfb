@@ -229,6 +229,14 @@ function ReviewPageContent() {
       }
 
       const p = data.data;
+      
+      // If protocol is already confirmed, redirect to /today
+      // (whether coming from checkout or not - no need to re-confirm)
+      if (p.status === "CONFIRMED") {
+        router.push("/today");
+        return;
+      }
+      
       setProtocol({
         id: p.id,
         cycleStartDate: p.cycleStartDate.split("T")[0],
