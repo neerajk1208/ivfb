@@ -126,12 +126,22 @@ export function getResourcesForContext(
   situations: string[],
   limit: number = 2
 ): Resource[] {
-  const phaseMatches = resourceLibrary.filter(
-    (r) => r.phases.includes(phase) || r.phases.some((p) => phase.startsWith(p.replace(/_\d+$/, "")))
-  );
+  // Phase matching: exact match or same phase family
+  const phaseMatches = resourceLibrary.filter((r) => {
+    if (r.phases.length === 0) return false; // Empty phases = needs situation match
+    return r.phases.some((p) => {
+      if (p === phase) return true;
+      const pFamily = p.replace(/_\d+$/, "");
+      const phaseFamily = phase.replace(/_\d+$/, "");
+      return pFamily === phaseFamily;
+    });
+  });
 
+  // Situation matching
   const situationMatches = resourceLibrary.filter((r) =>
-    r.situations.some((s) => situations.some((sit) => sit.toLowerCase().includes(s)))
+    r.situations.length > 0 && r.situations.some((s) => 
+      situations.some((sit) => sit.toLowerCase().includes(s.toLowerCase()))
+    )
   );
 
   const combined = [...new Set([...phaseMatches, ...situationMatches])];

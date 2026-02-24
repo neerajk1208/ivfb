@@ -158,11 +158,21 @@ export function getSuggestionsForContext(
       if (s.mood.max !== undefined && mood > s.mood.max) return false;
     }
 
-    const phaseMatch = s.phases.length === 0 || s.phases.some((p) => phase.startsWith(p.replace(/_\d+$/, "")));
-    const situationMatch = situations.some((sit) =>
+    // Phase matching: exact match or same phase family (e.g., stimulation_day_X)
+    const phaseMatch = s.phases.length > 0 && s.phases.some((p) => {
+      if (p === phase) return true;
+      // Match phase family: stimulation_day_1 matches stimulation_day_5 only if checking family
+      const pFamily = p.replace(/_\d+$/, "");
+      const phaseFamily = phase.replace(/_\d+$/, "");
+      return pFamily === phaseFamily;
+    });
+
+    // Situation matching: user symptom contains suggestion situation keyword
+    const situationMatch = s.situations.length > 0 && situations.some((sit) =>
       s.situations.some((ss) => sit.toLowerCase().includes(ss.toLowerCase()))
     );
 
+    // Need at least one filter to match (no filters = not eligible)
     return phaseMatch || situationMatch;
   });
 
