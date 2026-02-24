@@ -198,6 +198,11 @@ export async function syncToCalendar(
     return [year, month - 1, day];
   };
 
+  const formatLocalDateTime = (year: number, month: number, day: number, hour: number, minute: number): string => {
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    return `${year}-${pad(month + 1)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00`;
+  };
+
   if (options.includeMedications) {
     interface MedReminder {
       med: typeof protocol.medications[0];
@@ -275,43 +280,65 @@ export async function syncToCalendar(
     }
 
     for (const { meds, dateTime } of medsByDateTime.values()) {
-      const endDateTime = new Date(dateTime);
-      endDateTime.setMinutes(dateTime.getMinutes() + 15);
+      for (const r of meds) {
+        const startTimeStr = formatLocalDateTime(
+          dateTime.getFullYear(),
+          dateTime.getMonth(),
+          dateTime.getDate(),
+          dateTime.getHours(),
+          dateTime.getMinutes()
+        );
+        const endTime = new Date(dateTime);
+        endTime.setMinutes(dateTime.getMinutes() + 15);
+        const endTimeStr = formatLocalDateTime(
+          endTime.getFullYear(),
+          endTime.getMonth(),
+          endTime.getDate(),
+          endTime.getHours(),
+          endTime.getMinutes()
+        );
 
-      const medList = meds.map((r) => {
-        let label = r.med.name;
-        if (r.med.dosageAmount && r.med.dosageUnit) {
-          label += ` ${r.med.dosageAmount} ${r.med.dosageUnit}`;
-        }
-        if (r.med.unitStrength) {
-          label += ` (${r.med.unitStrength} each)`;
-        }
+        let title = `💊 ${r.med.name}`;
         if (r.doseNumber && r.totalDoses && r.totalDoses > 1) {
-          label += ` [Dose ${r.doseNumber}/${r.totalDoses}]`;
+          title += ` (Dose ${r.doseNumber}/${r.totalDoses})`;
         }
-        return label;
-      });
 
-      const summary = meds.length === 1
-        ? `💊 ${medList[0]}`
-        : `💊 Medications (${meds.length})`;
+        const descParts: string[] = [];
+        if (r.med.dosageAmount && r.med.dosageUnit) {
+          let dosageStr = `${r.med.dosageAmount} ${r.med.dosageUnit}`;
+          if (r.med.unitStrength) {
+            dosageStr += ` (${r.med.unitStrength} each)`;
+          }
+          descParts.push(`Dosage: ${dosageStr}`);
+        }
+        if (r.med.route) {
+          const routeLabels: Record<string, string> = {
+            subcutaneous: "Subcutaneous injection",
+            intramuscular: "Intramuscular injection",
+            oral: "Oral",
+            vaginal: "Vaginal",
+            patch: "Patch",
+            nasal: "Nasal",
+          };
+          descParts.push(`Route: ${routeLabels[r.med.route] || r.med.route}`);
+        }
+        if (r.med.instructions) {
+          descParts.push(`\nInstructions: ${r.med.instructions}`);
+        }
 
-      const description = meds.length > 1
-        ? medList.map((l) => `• ${l}`).join("\n")
-        : meds[0].med.instructions || undefined;
+        const event: CalendarEvent = {
+          summary: title,
+          description: descParts.length > 0 ? descParts.join("\n") : undefined,
+          start: { dateTime: startTimeStr, timeZone: timezone },
+          end: { dateTime: endTimeStr, timeZone: timezone },
+        };
 
-      const event: CalendarEvent = {
-        summary,
-        description,
-        start: { dateTime: dateTime.toISOString(), timeZone: timezone },
-        end: { dateTime: endDateTime.toISOString(), timeZone: timezone },
-      };
-
-      const created = await createCalendarEvent(accessToken, event);
-      if (created) {
-        result.synced++;
-      } else {
-        result.failed++;
+        const created = await createCalendarEvent(accessToken, event);
+        if (created) {
+          result.synced++;
+        } else {
+          result.failed++;
+        }
       }
     }
   }
@@ -324,18 +351,6 @@ export async function syncToCalendar(
           d.setDate(d.getDate() + apt.dayOffset);
           return [d.getFullYear(), d.getMonth(), d.getDate()] as [number, number, number];
         })();
-
-    let startHour = 9;
-    let startMinute = 0;
-    if (apt.exactTime) {
-      const [h, m] = apt.exactTime.split(":").map(Number);
-      startHour = h;
-      startMinute = m;
-    }
-
-    const startDateTime = new Date(aptYear, aptMonth, aptDay, startHour, startMinute, 0, 0);
-    const endDateTime = new Date(startDateTime);
-    endDateTime.setHours(startDateTime.getHours() + 1);
 
     const typeLabels: Record<string, string> = {
       BLOODWORK: "Bloodwork",
@@ -351,18 +366,27 @@ export async function syncToCalendar(
     if (apt.fasting) {
       description += "⚠️ Fasting required\n";
     }
+    if (apt.exactTime) {
+      const [h, m] = apt.exactTime.split(":").map(Number);
+      const ampm = h >= 12 ? "PM" : "AM";
+      const hour = h % 12 || 12;
+      description += `Time: ${hour}:${m.toString().padStart(2, "0")} ${ampm}\n`;
+    }
     if (apt.notes) {
       description += apt.notes;
     }
 
-    const event: CalendarEvent = {
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    const dateStr = `${aptYear}-${pad(aptMonth + 1)}-${pad(aptDay)}`;
+
+    const allDayEvent = {
       summary,
       description: description || undefined,
-      start: { dateTime: startDateTime.toISOString(), timeZone: timezone },
-      end: { dateTime: endDateTime.toISOString(), timeZone: timezone },
+      start: { date: dateStr },
+      end: { date: dateStr },
     };
 
-    const created = await createCalendarEvent(accessToken, event);
+    const created = await createCalendarEvent(accessToken, allDayEvent as any);
     if (created) {
       result.synced++;
     } else {
