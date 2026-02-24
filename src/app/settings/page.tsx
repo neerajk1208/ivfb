@@ -26,6 +26,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Bell, BellOff, Calendar, CalendarCheck, CalendarX, CreditCard } from "lucide-react";
+import { BottomNav } from "@/components/BottomNav";
 
 const COMMON_TIMEZONES = [
   { value: "America/New_York", label: "Eastern Time (ET)" },
@@ -355,7 +356,7 @@ export default function SettingsPage() {
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center pb-20">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
@@ -366,26 +367,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <div className="max-w-lg mx-auto px-4 py-8 space-y-6">
-        <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/today")}>
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </Button>
-          <h1 className="text-2xl font-semibold">Settings</h1>
-        </div>
+        <h1 className="text-2xl font-semibold">Settings</h1>
 
         <Card>
           <CardHeader>
@@ -780,6 +764,8 @@ export default function SettingsPage() {
           Sign Out
         </Button>
       </div>
+
+      <BottomNav />
     </div>
   );
 }

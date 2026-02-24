@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageCircle, Settings } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { BottomNav } from "@/components/BottomNav";
 
 interface Task {
   id: string;
@@ -193,7 +193,7 @@ function TodayPageContent() {
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center pb-20">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
@@ -204,33 +204,14 @@ function TodayPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <div className="max-w-lg mx-auto px-4 py-8 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">Today</h1>
-            <p className="text-muted-foreground">
-              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-              {data.cycleDayIndex > 0 && ` · Day ${data.cycleDayIndex}`}
-            </p>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => router.push("/chat")}
-              className="relative"
-            >
-              <MessageCircle className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => router.push("/settings")}
-            >
-              <Settings className="h-5 w-5" />
-            </Button>
-          </div>
+        <div>
+          <h1 className="text-2xl font-semibold">Today</h1>
+          <p className="text-muted-foreground">
+            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+            {data.cycleDayIndex > 0 && ` · Day ${data.cycleDayIndex}`}
+          </p>
         </div>
 
         {calendarSyncMessage && (
@@ -402,6 +383,8 @@ function TodayPageContent() {
           clinic&apos;s instructions.
         </p>
       </div>
+
+      <BottomNav />
     </div>
   );
 }

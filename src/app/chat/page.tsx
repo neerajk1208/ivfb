@@ -17,6 +17,7 @@ import {
   Clock,
 } from "lucide-react";
 import { format, addDays, subDays, isToday, isTomorrow, isYesterday } from "date-fns";
+import { BottomNav } from "@/components/BottomNav";
 
 interface Message {
   id: string;
@@ -203,7 +204,7 @@ export default function ChatPage() {
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center pb-20">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
@@ -293,7 +294,7 @@ export default function ChatPage() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
+        <div className="max-w-2xl mx-auto px-4 py-4 pb-36 space-y-4">
           {messages.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <MessageCircle className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -346,8 +347,8 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Input */}
-      <div className="border-t bg-card sticky bottom-0">
+      {/* Input - positioned above bottom nav */}
+      <div className="border-t bg-card sticky bottom-16 z-10">
         <div className="max-w-2xl mx-auto px-4 py-3">
           {error && (
             <p className="text-sm text-destructive mb-2">{error}</p>
@@ -371,17 +372,13 @@ export default function ChatPage() {
             </Button>
           </div>
 
-          <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
-            <span>{remainingMessages} messages remaining today</span>
-            <button
-              onClick={() => router.push("/today")}
-              className="hover:underline"
-            >
-              View tasks →
-            </button>
-          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            {remainingMessages} messages remaining today
+          </p>
         </div>
       </div>
+
+      <BottomNav />
     </div>
   );
 }
