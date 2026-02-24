@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import type { CheckInCreate } from "@/lib/validate";
+import { updateDailyMoodInsight } from "@/modules/insights/trendsService";
 
 export async function createCheckIn(
   userId: string,
@@ -15,6 +16,24 @@ export async function createCheckIn(
       source: data.source || "APP",
     },
   });
+
+  // Update daily mood insight in background
+  const cycle = await prisma.cycle.findUnique({
+    where: { id: data.cycleId },
+    include: { protocol: true },
+  });
+
+  if (cycle?.protocol) {
+    const today = new Date();
+    const cycleStart = cycle.protocol.cycleStartDate;
+    const cycleDayIndex = Math.floor(
+      (today.getTime() - cycleStart.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    updateDailyMoodInsight(userId, data.cycleId, today, cycleDayIndex).catch((err) => {
+      console.error("Failed to update daily mood insight:", err);
+    });
+  }
 
   return { id: checkIn.id };
 }

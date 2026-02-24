@@ -45,6 +45,10 @@ function formatChatMessage(task: any): string {
     return `💛 Daily check-in time! How are you feeling today?\n\nReply with a number 1-5 (1=rough, 5=great) and share any symptoms or notes.`;
   }
 
+  if (task.kind === "PROACTIVE_CHECKIN") {
+    return `💛 ${task.label}\n\nHow are you feeling? Reply with your mood (1-5) or just share what's on your mind.`;
+  }
+
   if (task.kind === "APPOINTMENT" || task.kind === "CRITICAL") {
     let msg = `📅 ${task.label}`;
     if (meta?.exactTime) {
@@ -104,6 +108,14 @@ function formatPushNotification(task: any): { title: string; body: string; tag: 
       title: "💛 Check-in Time",
       body: "How are you feeling today? Tap to log your mood.",
       tag: `checkin-${task.id}`,
+    };
+  }
+
+  if (task.kind === "PROACTIVE_CHECKIN") {
+    return {
+      title: "💛 Checking In",
+      body: task.label.slice(0, 100),
+      tag: `proactive-${task.id}`,
     };
   }
 

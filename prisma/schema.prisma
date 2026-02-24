@@ -154,17 +154,18 @@ model PlanDay {
 }
 
 model Task {
-  id         String    @id @default(cuid())
-  cycleId    String
-  planDayId  String?
-  kind       String
-  label      String
-  dueAt      DateTime?
-  timeWindow Json?
-  status     String    @default("PENDING")
-  meta       Json?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  cycleId          String
+  planDayId        String?
+  kind             String
+  label            String
+  dueAt            DateTime?
+  timeWindow       Json?
+  status           String    @default("PENDING")
+  meta             Json?
+  displayInUpcoming Boolean  @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   cycle   Cycle    @relation(fields: [cycleId], references: [id])
   planDay PlanDay? @relation(fields: [planDayId], references: [id])
@@ -237,4 +238,80 @@ model PushSubscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ============= INSIGHT TABLES =============
+// These tables support AI chat optimization without affecting core protocol logic
+
+model Insight_UserSuggestion {
+  id           String   @id @default(cuid())
+  userId       String
+  cycleId      String
+  suggestionId String
+  wasHelpful   Boolean?
+  dismissed    Boolean  @default(false)
+  shownAt      DateTime @default(now())
+  respondedAt  DateTime?
+
+  @@index([userId, cycleId])
+  @@index([suggestionId])
+}
+
+model Insight_UserMemory {
+  id        String   @id @default(cuid())
+  userId    String
+  category  String   // preference, fact, whatHelped, trigger
+  content   String
+  source    String   // chat, checkin, explicit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, category])
+}
+
+model Insight_DailyMood {
+  id           String   @id @default(cuid())
+  userId       String
+  cycleId      String
+  date         DateTime
+  cycleDayIndex Int
+  avgMood      Float?
+  symptoms     String[]
+  injectionCount Int    @default(0)
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, cycleId, date])
+  @@index([userId, cycleId])
+}
+
+model Insight_CycleSummary {
+  id               String   @id @default(cuid())
+  userId           String
+  cycleId          String   @unique
+  totalDays        Int
+  avgMood          Float?
+  commonSymptoms   String[]
+  whatHelped       String[]
+  whatDidntHelp    String[]
+  injectionTotal   Int      @default(0)
+  completedAt      DateTime?
+  createdAt        DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Insight_ProactiveCheckIn {
+  id           String   @id @default(cuid())
+  userId       String
+  cycleId      String
+  eventType    String   // trigger, retrieval, transfer, beta
+  scheduledFor DateTime
+  sent         Boolean  @default(false)
+  sentAt       DateTime?
+  displayInUI  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([userId, cycleId])
+  @@index([scheduledFor, sent])
 }

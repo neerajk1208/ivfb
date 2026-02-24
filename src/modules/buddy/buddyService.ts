@@ -5,6 +5,10 @@ import { getFallbackReply } from "./fallbackRules";
 import { containsSevereKeyword, escalationResponse } from "@/config/buddy/severeKeywords";
 import { buddySystemPrompt, buddyContextTemplate } from "@/config/buddy/system";
 import { appConfig } from "@/config/app";
+import { getResourcesForContext, type Resource } from "@/config/buddy/resources";
+import { pickSuggestionsForUser, recordSuggestionShown } from "@/modules/insights/suggestionService";
+import { getMemoriesForUser, formatMemoriesForContext, processMessageForMemories } from "@/modules/insights/memoryService";
+import { getRecentMoodTrend, formatTrendForContext } from "@/modules/insights/trendsService";
 import { getCycleDayIndex } from "@/lib/time";
 import { toZonedTime } from "date-fns-tz";
 
@@ -43,7 +47,12 @@ async function buildEnrichedContext(context: BuddyContext): Promise<string> {
   const cycle = await prisma.cycle.findUnique({
     where: { id: context.cycleId },
     include: {
-      protocol: { include: { medications: true } },
+      protocol: { 
+        include: { 
+          medications: true,
+          appointments: true,
+        } 
+      },
       tasks: {
         where: { status: "PENDING" },
         orderBy: { dueAt: "asc" },
@@ -66,14 +75,37 @@ async function buildEnrichedContext(context: BuddyContext): Promise<string> {
 
   const cycleDayIndex = getCycleDayIndex(cycleStartDate, today);
 
-  const todayMeds = cycle?.protocol?.medications
-    .filter((m) => {
-      const start = m.startDayOffset;
-      const end = m.startDayOffset + m.durationDays - 1;
-      return cycleDayIndex >= start && cycleDayIndex <= end;
-    })
+  // Get today's medications with details
+  const todayMedsList = cycle?.protocol?.medications.filter((m) => {
+    const start = m.startDayOffset;
+    const end = m.startDayOffset + m.durationDays - 1;
+    return cycleDayIndex >= start && cycleDayIndex <= end;
+  }) || [];
+
+  const todayMeds = todayMedsList
     .map((m) => `${m.name}${m.dosage ? ` ${m.dosage}` : ""}`)
     .join(", ") || "None scheduled";
+
+  // Count injections (subcutaneous or intramuscular)
+  const injectionCount = todayMedsList.filter(
+    (m) => m.route === "subcutaneous" || m.route === "intramuscular"
+  ).length;
+
+  // Determine cycle phase and next big event
+  const appointments = cycle?.protocol?.appointments || [];
+  const bigEventTypes = ["TRIGGER", "RETRIEVAL", "TRANSFER"];
+  
+  const upcomingBigEvents = appointments
+    .filter((a) => bigEventTypes.includes(a.type) && a.dayOffset >= cycleDayIndex)
+    .sort((a, b) => a.dayOffset - b.dayOffset);
+
+  const nextBigEvent = upcomingBigEvents[0];
+  const daysUntilBigEvent = nextBigEvent 
+    ? `${nextBigEvent.type} in ${nextBigEvent.dayOffset - cycleDayIndex} days`
+    : "No major events scheduled";
+
+  // Determine phase based on appointments and cycle day
+  const cyclePhase = determineCyclePhase(cycleDayIndex, appointments);
 
   const nextTasks = cycle?.tasks
     .slice(0, 2)
@@ -91,14 +123,86 @@ async function buildEnrichedContext(context: BuddyContext): Promise<string> {
 
   const conversationSummary = cycle?.convoState?.summary || "No previous conversation";
 
+  // Get relevant resources based on phase and symptoms
+  const relevantResources = getResourcesForContext(cyclePhase, context.symptoms);
+  const resourcesText = relevantResources.length > 0
+    ? relevantResources.map((r) => `- ${r.title}: ${r.url}`).join("\n")
+    : "No specific resources for this context";
+
+  // Get personalized suggestions
+  const suggestions = await pickSuggestionsForUser(
+    context.userId,
+    context.cycleId,
+    cyclePhase,
+    context.symptoms,
+    context.mood
+  );
+  const suggestionsText = suggestions.length > 0
+    ? suggestions.map((s) => `- [${s.id}] ${s.text}`).join("\n")
+    : "No specific suggestions for this context";
+
+  // Record that these suggestions were shown
+  for (const s of suggestions) {
+    await recordSuggestionShown(context.userId, context.cycleId, s.id);
+  }
+
+  // Get user memories for personalization
+  const memories = await getMemoriesForUser(context.userId, 10);
+  const memoriesText = formatMemoriesForContext(memories);
+
+  // Process message for new memories (async, don't block)
+  processMessageForMemories(context.userId, context.userMessage).catch(() => {});
+
+  // Get mood trends
+  const moodTrend = await getRecentMoodTrend(context.userId, context.cycleId);
+  const moodTrendText = formatTrendForContext(moodTrend);
+
   return buddyContextTemplate
     .replace("{{cycleDayIndex}}", cycleDayIndex.toString())
+    .replace("{{cyclePhase}}", cyclePhase)
+    .replace("{{injectionCount}}", injectionCount.toString())
+    .replace("{{daysUntilBigEvent}}", daysUntilBigEvent)
     .replace("{{todayMeds}}", todayMeds)
     .replace("{{nextTasks}}", nextTasks)
     .replace("{{recentMood}}", recentMoods)
     .replace("{{recentSymptoms}}", recentSymptoms)
+    .replace("{{relevantResources}}", resourcesText)
+    .replace("{{suggestions}}", suggestionsText)
+    .replace("{{memories}}", memoriesText)
+    .replace("{{moodTrend}}", moodTrendText)
     .replace("{{userMessage}}", context.userMessage)
     .replace("{{conversationSummary}}", conversationSummary);
+}
+
+function determineCyclePhase(
+  cycleDayIndex: number, 
+  appointments: Array<{ type: string; dayOffset: number }>
+): string {
+  const trigger = appointments.find((a) => a.type === "TRIGGER");
+  const retrieval = appointments.find((a) => a.type === "RETRIEVAL");
+  const transfer = appointments.find((a) => a.type === "TRANSFER");
+
+  if (transfer && cycleDayIndex >= transfer.dayOffset) {
+    const daysPost = cycleDayIndex - transfer.dayOffset;
+    if (daysPost === 0) return "transfer_day";
+    return `tww_day_${daysPost}`;
+  }
+  
+  if (retrieval && cycleDayIndex >= retrieval.dayOffset) {
+    const daysPost = cycleDayIndex - retrieval.dayOffset;
+    if (daysPost === 0) return "retrieval_day";
+    return `post_retrieval_day_${daysPost}`;
+  }
+  
+  if (trigger && cycleDayIndex >= trigger.dayOffset) {
+    return "trigger_day";
+  }
+  
+  if (trigger && cycleDayIndex === trigger.dayOffset - 1) {
+    return "pre_trigger";
+  }
+
+  return `stimulation_day_${cycleDayIndex}`;
 }
 
 async function callOpenAI(contextPrompt: string, userMessage: string): Promise<BuddyReply> {

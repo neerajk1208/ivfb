@@ -8,8 +8,10 @@ import {
   DEFAULT_TIMES,
 } from "@/lib/time";
 import { appConfig } from "@/config/app";
+import { createProactiveCheckInTasks } from "@/modules/insights/proactiveCheckinService";
 
 interface GenerateTasksInput {
+  userId: string;
   cycleId: string;
   protocolPlanId: string;
   userTimezone: string;
@@ -53,7 +55,7 @@ function formatMedicationLabel(
 }
 
 export async function generatePlanTasks(input: GenerateTasksInput) {
-  const { cycleId, protocolPlanId, userTimezone, quietHours } = input;
+  const { userId, cycleId, protocolPlanId, userTimezone, quietHours } = input;
 
   const protocol = await prisma.protocolPlan.findUnique({
     where: { id: protocolPlanId },
@@ -322,9 +324,22 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
     })
   );
 
+  // Schedule proactive check-ins after big events (retrieval, transfer, trigger)
+  const proactiveCheckInsCreated = await createProactiveCheckInTasks(
+    userId,
+    cycleId,
+    protocol.appointments.map((a) => ({
+      type: a.type,
+      date: a.date,
+      dayOffset: a.dayOffset,
+    })),
+    protocol.cycleStartDate,
+    userTimezone
+  );
+
   return {
     planDaysCreated: planDays.length,
-    tasksCreated: tasks.length,
+    tasksCreated: tasks.length + proactiveCheckInsCreated,
   };
 }
 

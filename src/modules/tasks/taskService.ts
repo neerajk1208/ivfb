@@ -4,7 +4,7 @@ export async function getDueTasks(limit = 50) {
   return prisma.task.findMany({
     where: {
       status: "PENDING",
-      kind: { in: ["REMINDER", "CHECKIN"] },
+      kind: { in: ["REMINDER", "CHECKIN", "PROACTIVE_CHECKIN"] },
       dueAt: { lte: new Date() },
       cycle: {
         user: {
@@ -44,7 +44,7 @@ export async function markTaskDone(taskId: string) {
   });
 }
 
-export async function getTodayTasks(cycleId: string) {
+export async function getTodayTasks(cycleId: string, forUI = true) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -58,17 +58,19 @@ export async function getTodayTasks(cycleId: string) {
         gte: today,
         lt: tomorrow,
       },
+      ...(forUI ? { displayInUpcoming: true } : {}),
     },
     orderBy: { dueAt: "asc" },
   });
 }
 
-export async function getUpcomingTasks(cycleId: string, limit = 10) {
+export async function getUpcomingTasks(cycleId: string, limit = 10, forUI = true) {
   return prisma.task.findMany({
     where: {
       cycleId,
       dueAt: { gt: new Date() },
       status: "PENDING",
+      ...(forUI ? { displayInUpcoming: true } : {}),
     },
     orderBy: { dueAt: "asc" },
     take: limit,

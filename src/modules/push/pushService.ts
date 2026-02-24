@@ -37,12 +37,41 @@ export interface PushPayload {
   actions?: Array<{ action: string; title: string }>;
 }
 
+export interface PushWithChatOptions {
+  logToChat: boolean;
+  cycleId?: string;
+  messageType?: "REMINDER" | "CHECKIN" | "APPOINTMENT" | "INFO";
+  meta?: Record<string, any>;
+}
+
 export async function sendPushToUser(
   userId: string,
-  payload: PushPayload
-): Promise<{ sent: number; failed: number; errors: string[] }> {
+  payload: PushPayload,
+  chatOptions?: PushWithChatOptions
+): Promise<{ sent: number; failed: number; errors: string[]; chatMessageId?: string }> {
+  // Log to chat first (even if push fails, user should see in chat)
+  let chatMessageId: string | undefined;
+  
+  if (chatOptions?.logToChat && chatOptions.cycleId) {
+    try {
+      const chatMessage = await prisma.chatMessage.create({
+        data: {
+          userId,
+          cycleId: chatOptions.cycleId,
+          sender: "SYSTEM",
+          type: chatOptions.messageType || "INFO",
+          content: `**${payload.title}**\n${payload.body}`,
+          meta: chatOptions.meta ?? undefined,
+        },
+      });
+      chatMessageId = chatMessage.id;
+    } catch (error) {
+      console.error("Failed to log push to chat:", error);
+    }
+  }
+
   if (!configureVapid()) {
-    return { sent: 0, failed: 0, errors: ["VAPID not configured"] };
+    return { sent: 0, failed: 0, errors: ["VAPID not configured"], chatMessageId };
   }
 
   const subscriptions = await prisma.pushSubscription.findMany({
@@ -50,10 +79,10 @@ export async function sendPushToUser(
   });
 
   if (subscriptions.length === 0) {
-    return { sent: 0, failed: 0, errors: [] };
+    return { sent: 0, failed: 0, errors: [], chatMessageId };
   }
 
-  const result = { sent: 0, failed: 0, errors: [] as string[] };
+  const result = { sent: 0, failed: 0, errors: [] as string[], chatMessageId };
 
   for (const sub of subscriptions) {
     try {

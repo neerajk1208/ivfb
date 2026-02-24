@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
     });
 
     const result = await generatePlanTasks({
+      userId: user.id,
       cycleId: cycle.id,
       protocolPlanId,
       userTimezone: user.timezone,
