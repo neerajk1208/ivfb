@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,18 +29,22 @@ export function PWAGate({ children }: { children: React.ReactNode }) {
   const [showGate, setShowGate] = useState(false);
   const [platform, setPlatform] = useState<Platform>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [checking, setChecking] = useState(true);
-  const [stateLog, setStateLog] = useState<string[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  // Check if we've already authenticated in this browser session
+  const hasAuthenticated = typeof window !== "undefined" && 
+    sessionStorage.getItem("pwa-authenticated") === "true";
 
   useEffect(() => {
-    const isPWA = typeof window !== "undefined" && isRunningAsPWA();
-    const stateKey = `${new Date().toLocaleTimeString()}: status=${status}, checking=${checking}, isPWA=${isPWA}`;
-    
-    setStateLog(prev => {
-      const newLog = [...prev, stateKey].slice(-5); // Keep last 5 states
-      return newLog;
-    });
-  }, [status, checking]);
+    setMounted(true);
+  }, []);
+
+  // Mark as authenticated when we get authenticated status
+  useEffect(() => {
+    if (status === "authenticated" && typeof window !== "undefined") {
+      sessionStorage.setItem("pwa-authenticated", "true");
+    }
+  }, [status]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -49,7 +53,6 @@ export function PWAGate({ children }: { children: React.ReactNode }) {
     const skipped = sessionStorage.getItem("pwa-gate-skipped") === "true";
 
     setPlatform(detectPlatform());
-    setChecking(false);
 
     if (status === "authenticated" && !isPWA && !skipped) {
       setShowGate(true);
@@ -82,19 +85,27 @@ export function PWAGate({ children }: { children: React.ReactNode }) {
     }
   };
 
-  if (checking || status === "loading") {
+  // Only show loading on initial mount if we haven't authenticated before
+  // This prevents loading flash during redirects
+  if (!mounted) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="text-center w-full max-w-sm">
-          <div className="animate-pulse text-muted-foreground text-lg mb-4">Loading...</div>
-          <div className="bg-muted/50 rounded p-3 text-left">
-            <div className="text-xs font-mono text-muted-foreground space-y-1">
-              {stateLog.map((log, i) => (
-                <div key={i}>{log}</div>
-              ))}
-            </div>
-          </div>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  // If we've authenticated before in this session, skip the loading screen
+  // and let the page handle its own loading state
+  if (status === "loading" && hasAuthenticated) {
+    return <>{children}</>;
+  }
+
+  // First time loading - show loading screen
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
   }
