@@ -127,12 +127,11 @@ ${JSON.stringify(protocolPlanExtractionJsonSchema, null, 2)}
 - READ ACTUAL DATES from column headers - do NOT calculate offsets
 - For each medication: startDate = first column with mark, endDate = last column with mark
 - For each appointment: date = the column where it's marked
-- Extract EXACT trigger time if shown
+- Extract EXACT trigger time if shown - this is critical for IVF success
 - BW/U/S are appointments, not medications
 - APPOINTMENT TYPES: Read carefully - BW=BLOODWORK, U/S=ULTRASOUND, both=MONITORING, VOR/ER=RETRIEVAL, ET=TRANSFER
-- ONLY include appointments that are EXPLICITLY marked in the document
-- If you can't determine something, set confidence to "low" and add to missingFields
-- Do NOT make up information - only extract what you clearly see`;
+- IMPORTANT: Include ALL appointments shown - Trigger shots, Retrieval (VOR/ER), Transfer (ET) are CRITICAL events
+- If you can't determine something, set confidence to "low" and add to missingFields`;
 
 export async function extractProtocolFromText(
   extractedText: string
@@ -207,8 +206,7 @@ STEP 2 - EXTRACT MEDICATIONS WITH ACTUAL DATES:
 - DO NOT calculate offsets - just read the actual dates from column headers
 
 STEP 3 - EXTRACT APPOINTMENTS WITH ACTUAL DATES:
-- ONLY include appointments that are EXPLICITLY marked in the document
-- For each appointment, read the date from its column header
+- For each appointment shown, read the date from its column header
 - date = the ACTUAL date where this appointment is marked
 - Example: If "BW" is marked in the "Feb 17" column:
   type: "BLOODWORK", date: "2025-02-17"
@@ -216,15 +214,15 @@ STEP 3 - EXTRACT APPOINTMENTS WITH ACTUAL DATES:
   * "BW" alone = BLOODWORK
   * "U/S" alone = ULTRASOUND
   * "BW + U/S" or "Monitoring" = MONITORING
-  * "VOR", "ER", "Retrieval" = RETRIEVAL
-  * "ET", "Transfer" = TRANSFER
-  * "Trigger" = TRIGGER
-- Do NOT invent appointments - only extract what's explicitly shown
+  * "VOR", "ER", "Retrieval" = RETRIEVAL (set critical: true)
+  * "ET", "Transfer" = TRANSFER (set critical: true)
+  * "Trigger" with time = TRIGGER (set critical: true, include exactTime!)
+- IMPORTANT: Trigger, Retrieval (VOR/ER), and Transfer (ET) are CRITICAL - do not skip them!
 
 STEP 4 - VERIFY:
 - Double-check each date matches its column header
 - Verify appointment types match what's written
-- Remove any appointments you're not 100% certain about
+- Ensure Trigger shot time is captured if shown
 
 Return JSON only.` 
             },
