@@ -638,7 +638,7 @@ function ReviewPageContent() {
                 <CardTitle className="text-sm font-medium">Appointments ({appointmentPreviews.length})</CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <ul className="space-y-1.5 text-sm max-h-40 overflow-y-auto">
+                <ul className="space-y-1.5 text-sm max-h-64 overflow-y-auto">
                   {appointmentPreviews.map((preview, i) => (
                     <li key={i} className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -668,7 +668,7 @@ function ReviewPageContent() {
                   <CardTitle className="text-sm font-medium">Medication Reminders ({medicationPreviews.length})</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <ul className="space-y-1.5 text-sm max-h-40 overflow-y-auto">
+                  <ul className="space-y-1.5 text-sm max-h-64 overflow-y-auto">
                     {medicationPreviews.map((preview, i) => (
                       <li key={i} className="flex items-center gap-2">
                         <Pill className="w-4 h-4 text-muted-foreground shrink-0" />
