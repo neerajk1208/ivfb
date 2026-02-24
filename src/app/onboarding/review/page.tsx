@@ -385,13 +385,15 @@ function ReviewPageContent() {
     }
   };
 
-  const updateMedication = (id: string, field: keyof Medication, value: any) => {
-    if (!protocol) return;
-    setProtocol({
-      ...protocol,
-      medications: protocol.medications.map((m) =>
-        m.id === id ? { ...m, [field]: value } : m
-      ),
+  const updateMedication = (id: string, updates: Partial<Medication>) => {
+    setProtocol((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        medications: prev.medications.map((m) =>
+          m.id === id ? { ...m, ...updates } : m
+        ),
+      };
     });
   };
 
@@ -429,13 +431,15 @@ function ReviewPageContent() {
     });
   };
 
-  const updateAppointment = (id: string, field: keyof Appointment, value: any) => {
-    if (!protocol) return;
-    setProtocol({
-      ...protocol,
-      appointments: protocol.appointments.map((a) =>
-        a.id === id ? { ...a, [field]: value } : a
-      ),
+  const updateAppointment = (id: string, updates: Partial<Appointment>) => {
+    setProtocol((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        appointments: prev.appointments.map((a) =>
+          a.id === id ? { ...a, ...updates } : a
+        ),
+      };
     });
   };
 
@@ -1269,7 +1273,7 @@ function ReviewPageContent() {
                         value={med.name}
                         placeholder="e.g., Gonal-F, Menopur, Cetrotide"
                         onChange={(e) =>
-                          updateMedication(med.id, "name", e.target.value)
+                          updateMedication(med.id, { name: e.target.value })
                         }
                       />
                     </div>
@@ -1283,7 +1287,7 @@ function ReviewPageContent() {
                         placeholder="e.g., 225"
                         value={med.dosageAmount || ""}
                         onChange={(e) =>
-                          updateMedication(med.id, "dosageAmount", e.target.value ? parseFloat(e.target.value) : null)
+                          updateMedication(med.id, { dosageAmount: e.target.value ? parseFloat(e.target.value) : null })
                         }
                       />
                     </div>
@@ -1294,7 +1298,7 @@ function ReviewPageContent() {
                       <Select
                         value={med.dosageUnit || "IU"}
                         onValueChange={(v) =>
-                          updateMedication(med.id, "dosageUnit", v)
+                          updateMedication(med.id, { dosageUnit: v })
                         }
                       >
                         <SelectTrigger>
@@ -1318,7 +1322,7 @@ function ReviewPageContent() {
                           placeholder="e.g., 2mg"
                           value={med.unitStrength || ""}
                           onChange={(e) =>
-                            updateMedication(med.id, "unitStrength", e.target.value || null)
+                            updateMedication(med.id, { unitStrength: e.target.value || null })
                           }
                         />
                       </div>
@@ -1330,7 +1334,7 @@ function ReviewPageContent() {
                       <Select
                         value={med.route || "subcutaneous"}
                         onValueChange={(v) =>
-                          updateMedication(med.id, "route", v)
+                          updateMedication(med.id, { route: v })
                         }
                       >
                         <SelectTrigger>
@@ -1352,14 +1356,11 @@ function ReviewPageContent() {
                       <Select
                         value={med.frequency}
                         onValueChange={(v) => {
-                          updateMedication(med.id, "frequency", v);
-                          // Initialize doses when switching to multi-dose frequency
                           const doseCount = getDosesForFrequency(v);
-                          if (doseCount > 1) {
-                            updateMedication(med.id, "doses", getDefaultDoses(v));
-                          } else {
-                            updateMedication(med.id, "doses", null);
-                          }
+                          updateMedication(med.id, {
+                            frequency: v,
+                            doses: doseCount > 1 ? getDefaultDoses(v) : null,
+                          });
                         }}
                       >
                         <SelectTrigger>
@@ -1382,15 +1383,12 @@ function ReviewPageContent() {
                         type="date"
                         value={med.startDate || ""}
                         onChange={(e) => {
-                          updateMedication(med.id, "startDate", e.target.value || null);
-                          // Also update startDayOffset for backward compat
-                          if (protocol.cycleStartDate && e.target.value) {
-                            updateMedication(
-                              med.id,
-                              "startDayOffset",
-                              getOffsetFromDate(protocol.cycleStartDate, e.target.value)
-                            );
+                          const newDate = e.target.value || null;
+                          const updates: Partial<Medication> = { startDate: newDate };
+                          if (protocol?.cycleStartDate && newDate) {
+                            updates.startDayOffset = getOffsetFromDate(protocol.cycleStartDate, newDate);
                           }
+                          updateMedication(med.id, updates);
                         }}
                       />
                     </div>
@@ -1409,16 +1407,12 @@ function ReviewPageContent() {
                         type="date"
                         value={med.endDate || ""}
                         onChange={(e) => {
-                          updateMedication(med.id, "endDate", e.target.value || null);
-                          // Also update durationDays for backward compat
-                          if (med.startDate && e.target.value) {
-                            const newDuration = getOffsetFromDate(med.startDate, e.target.value) + 1;
-                            updateMedication(
-                              med.id,
-                              "durationDays",
-                              Math.max(1, newDuration)
-                            );
+                          const newDate = e.target.value || null;
+                          const updates: Partial<Medication> = { endDate: newDate };
+                          if (med.startDate && newDate) {
+                            updates.durationDays = Math.max(1, getOffsetFromDate(med.startDate, newDate) + 1);
                           }
+                          updateMedication(med.id, updates);
                         }}
                       />
                     </div>
@@ -1431,7 +1425,7 @@ function ReviewPageContent() {
                           <Select
                             value={med.timeOfDay || "evening"}
                             onValueChange={(v) =>
-                              updateMedication(med.id, "timeOfDay", v)
+                              updateMedication(med.id, { timeOfDay: v })
                             }
                           >
                             <SelectTrigger>
@@ -1452,7 +1446,7 @@ function ReviewPageContent() {
                             type="time"
                             value={med.exactTime || ""}
                             onChange={(e) =>
-                              updateMedication(med.id, "exactTime", e.target.value || null)
+                              updateMedication(med.id, { exactTime: e.target.value || null })
                             }
                           />
                         </div>
@@ -1473,7 +1467,7 @@ function ReviewPageContent() {
                                 const updated = currentDoses.map((d, i) =>
                                   i === idx ? { ...d, timeOfDay: v } : d
                                 );
-                                updateMedication(med.id, "doses", updated);
+                                updateMedication(med.id, { doses: updated });
                               }}
                             >
                               <SelectTrigger className="w-32">
@@ -1496,7 +1490,7 @@ function ReviewPageContent() {
                                 const updated = currentDoses.map((d, i) =>
                                   i === idx ? { ...d, exactTime: e.target.value || null } : d
                                 );
-                                updateMedication(med.id, "doses", updated);
+                                updateMedication(med.id, { doses: updated });
                               }}
                             />
                           </div>
@@ -1511,7 +1505,7 @@ function ReviewPageContent() {
                         placeholder="e.g., Take with food, rotate injection sites"
                         value={med.instructions || ""}
                         onChange={(e) =>
-                          updateMedication(med.id, "instructions", e.target.value || null)
+                          updateMedication(med.id, { instructions: e.target.value || null })
                         }
                       />
                     </div>
@@ -1582,7 +1576,7 @@ function ReviewPageContent() {
                       <Select
                         value={apt.type}
                         onValueChange={(v) =>
-                          updateAppointment(apt.id, "type", v)
+                          updateAppointment(apt.id, { type: v })
                         }
                       >
                         <SelectTrigger>
@@ -1612,15 +1606,12 @@ function ReviewPageContent() {
                         type="date"
                         value={apt.date || ""}
                         onChange={(e) => {
-                          updateAppointment(apt.id, "date", e.target.value || null);
-                          // Also update dayOffset for backward compat
-                          if (protocol.cycleStartDate && e.target.value) {
-                            updateAppointment(
-                              apt.id,
-                              "dayOffset",
-                              getOffsetFromDate(protocol.cycleStartDate, e.target.value)
-                            );
+                          const newDate = e.target.value || null;
+                          const updates: Partial<Appointment> = { date: newDate };
+                          if (protocol?.cycleStartDate && newDate) {
+                            updates.dayOffset = getOffsetFromDate(protocol.cycleStartDate, newDate);
                           }
+                          updateAppointment(apt.id, updates);
                         }}
                       />
                     </div>
@@ -1632,7 +1623,7 @@ function ReviewPageContent() {
                         type="time"
                         value={apt.exactTime || ""}
                         onChange={(e) =>
-                          updateAppointment(apt.id, "exactTime", e.target.value || null)
+                          updateAppointment(apt.id, { exactTime: e.target.value || null })
                         }
                       />
                     </div>
@@ -1644,7 +1635,7 @@ function ReviewPageContent() {
                         placeholder="Any special notes"
                         value={apt.notes || ""}
                         onChange={(e) =>
-                          updateAppointment(apt.id, "notes", e.target.value || null)
+                          updateAppointment(apt.id, { notes: e.target.value || null })
                         }
                       />
                     </div>
@@ -1654,7 +1645,7 @@ function ReviewPageContent() {
                       <Switch
                         checked={apt.fasting}
                         onCheckedChange={(v) =>
-                          updateAppointment(apt.id, "fasting", v)
+                          updateAppointment(apt.id, { fasting: v })
                         }
                       />
                       <Label className="text-xs">Fasting required</Label>
@@ -1665,7 +1656,7 @@ function ReviewPageContent() {
                       <Switch
                         checked={apt.critical}
                         onCheckedChange={(v) =>
-                          updateAppointment(apt.id, "critical", v)
+                          updateAppointment(apt.id, { critical: v })
                         }
                       />
                       <Label className="text-xs">Time-critical</Label>
