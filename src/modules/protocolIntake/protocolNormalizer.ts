@@ -1,5 +1,37 @@
 import { prisma } from "@/lib/db";
+import { subDays, parseISO, format } from "date-fns";
 import type { ProtocolPlanExtraction } from "./protocolSchemas";
+
+/**
+ * Validates and corrects trigger date based on retrieval date.
+ * Trigger shot is always ~36 hours before retrieval, so trigger date = retrieval date - 2 days.
+ * This corrects AI extraction errors where trigger date may be off by 1-7 days.
+ */
+function validateTriggerDate(
+  appointments: ProtocolPlanExtraction["appointments"]
+): ProtocolPlanExtraction["appointments"] {
+  if (!appointments || appointments.length === 0) return appointments;
+
+  const retrievalAppt = appointments.find((a) =>
+    /retrieval|vor|egg.?retrieval/i.test(a.type)
+  );
+  const triggerAppt = appointments.find((a) => /trigger/i.test(a.type));
+
+  if (!retrievalAppt || !triggerAppt) return appointments;
+
+  const retrievalDate = (retrievalAppt as any).date;
+  if (!retrievalDate) return appointments;
+
+  // Calculate expected trigger date: retrieval - 2 days
+  const retrievalParsed = parseISO(retrievalDate);
+  const expectedTrigger = subDays(retrievalParsed, 2);
+  const expectedTriggerStr = format(expectedTrigger, "yyyy-MM-dd");
+
+  // Update trigger date to the expected value
+  (triggerAppt as any).date = expectedTriggerStr;
+
+  return appointments;
+}
 
 export interface SaveProtocolDraftInput {
   cycleId: string;
@@ -30,6 +62,9 @@ export async function saveProtocolPlanDraft(input: SaveProtocolDraftInput) {
     });
   }
 
+  // Validate trigger date based on retrieval date (biological constraint)
+  const validatedAppointments = validateTriggerDate(extraction.appointments);
+
   const cycleStartDate = extraction.cycleStartDate
     ? new Date(extraction.cycleStartDate)
     : new Date();
@@ -42,7 +77,7 @@ export async function saveProtocolPlanDraft(input: SaveProtocolDraftInput) {
       cycleStartDate,
       notes: extraction.notes,
       rawDocumentUrl: rawDocumentUrl || null,
-      structuredData: extraction as any,
+      structuredData: { ...extraction, appointments: validatedAppointments } as any,
       medications: {
         create: extraction.medications.map((med) => ({
           name: med.name,
@@ -63,7 +98,7 @@ export async function saveProtocolPlanDraft(input: SaveProtocolDraftInput) {
         })),
       },
       appointments: {
-        create: (extraction.appointments || []).map((apt) => ({
+        create: (validatedAppointments || []).map((apt) => ({
           type: apt.type,
           date: (apt as any).date ? new Date((apt as any).date) : null,
           dayOffset: apt.dayOffset ?? 0,
