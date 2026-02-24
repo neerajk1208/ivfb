@@ -8,6 +8,7 @@ import {
 } from "@/lib/http";
 import { syncToCalendar, isCalendarConnected } from "@/modules/calendar/calendarService";
 import { hasActiveSubscription } from "@/lib/stripe";
+import { prisma } from "@/lib/db";
 
 export async function POST(request: Request) {
   try {
@@ -33,6 +34,14 @@ export async function POST(request: Request) {
     const includeMedications = body?.includeMedications ?? false;
 
     const result = await syncToCalendar(user.id, cycle.id, { includeMedications });
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        calendarSyncedAt: new Date(),
+        calendarSyncedMeds: includeMedications,
+      },
+    });
 
     const itemType = includeMedications ? "events" : "appointments";
     return successResponse({

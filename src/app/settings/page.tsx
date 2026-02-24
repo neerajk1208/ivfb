@@ -69,6 +69,8 @@ export default function SettingsPage() {
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [includeMedications, setIncludeMedications] = useState(false);
+  const [calendarSyncedAt, setCalendarSyncedAt] = useState<string | null>(null);
+  const [calendarSyncedMeds, setCalendarSyncedMeds] = useState(false);
 
   const [billingStatus, setBillingStatus] = useState<{
     status: string;
@@ -168,6 +170,8 @@ export default function SettingsPage() {
       const data = await res.json();
       if (res.ok && data.data) {
         setCalendarConnected(data.data.connected);
+        setCalendarSyncedAt(data.data.syncedAt);
+        setCalendarSyncedMeds(data.data.syncedMeds || false);
       }
     } catch (err) {
       console.error("Failed to check calendar status:", err);
@@ -208,6 +212,8 @@ export default function SettingsPage() {
       const data = await res.json();
       if (res.ok) {
         setMessage(data.data?.message || "Calendar synced!");
+        setCalendarSyncedAt(new Date().toISOString());
+        setCalendarSyncedMeds(includeMedications);
       } else {
         setMessage(data.error || "Failed to sync calendar");
       }
@@ -562,24 +568,50 @@ export default function SettingsPage() {
 
             {calendarConnected ? (
               <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="includeMeds"
-                    checked={includeMedications}
-                    onCheckedChange={(checked) => setIncludeMedications(!!checked)}
-                  />
-                  <Label htmlFor="includeMeds" className="text-sm cursor-pointer">
-                    Include medication reminders
-                  </Label>
-                </div>
+                {calendarSyncedAt && (
+                  <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                    <p className="font-medium text-primary">✓ Already synced</p>
+                    <p className="text-muted-foreground">
+                      Last synced: {new Date(calendarSyncedAt).toLocaleDateString("en-US", { 
+                        month: "short", day: "numeric", hour: "numeric", minute: "2-digit" 
+                      })}
+                      {calendarSyncedMeds ? " (with medications)" : " (appointments only)"}
+                    </p>
+                    {!calendarSyncedMeds && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Check the box below to add medication reminders
+                      </p>
+                    )}
+                  </div>
+                )}
+                
+                {!calendarSyncedMeds && (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="includeMeds"
+                      checked={includeMedications}
+                      onCheckedChange={(checked) => setIncludeMedications(!!checked)}
+                    />
+                    <Label htmlFor="includeMeds" className="text-sm cursor-pointer">
+                      Include medication reminders
+                    </Label>
+                  </div>
+                )}
+
+                {calendarSyncedAt && (
+                  <p className="text-xs text-amber-600">
+                    ⚠️ Syncing again will create duplicate events in your calendar
+                  </p>
+                )}
+
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
                     className="flex-1"
                     onClick={handleSyncCalendar}
-                    disabled={isSyncing}
+                    disabled={isSyncing || !!(calendarSyncedAt && calendarSyncedMeds && !includeMedications)}
                   >
-                    {isSyncing ? "Syncing..." : "Sync Now"}
+                    {isSyncing ? "Syncing..." : calendarSyncedAt ? "Sync Again" : "Sync Now"}
                   </Button>
                   <Button
                     variant="ghost"

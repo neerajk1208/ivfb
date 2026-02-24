@@ -20,6 +20,8 @@ model User {
   calendarAccessToken     String?
   calendarRefreshToken    String?
   calendarConnectedAt     DateTime?
+  calendarSyncedAt        DateTime?
+  calendarSyncedMeds      Boolean   @default(false)
   stripeCustomerId        String?   @unique
   subscriptionId          String?
   subscriptionStatus      String    @default("none")

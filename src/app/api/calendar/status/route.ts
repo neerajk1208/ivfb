@@ -16,12 +16,16 @@ export async function GET() {
         email: true,
         calendarRefreshToken: true,
         calendarConnectedAt: true,
+        calendarSyncedAt: true,
+        calendarSyncedMeds: true,
       },
     });
 
     return successResponse({
       connected: !!userData?.calendarRefreshToken,
       connectedAt: userData?.calendarConnectedAt,
+      syncedAt: userData?.calendarSyncedAt,
+      syncedMeds: userData?.calendarSyncedMeds,
       email: userData?.email,
     });
   } catch (error) {

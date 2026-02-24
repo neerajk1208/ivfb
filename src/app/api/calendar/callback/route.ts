@@ -34,7 +34,12 @@ export async function GET(request: NextRequest) {
     await saveCalendarTokens(state.userId, tokens.accessToken, tokens.refreshToken);
 
     const returnUrl = state.returnTo || "/settings";
-    return Response.redirect(`${baseUrl}${returnUrl}?calendar=connected`);
+    const hasQuery = returnUrl.includes("?");
+    const separator = hasQuery ? "&" : "?";
+    const finalUrl = returnUrl.includes("calendar=connected") 
+      ? `${baseUrl}${returnUrl}` 
+      : `${baseUrl}${returnUrl}${separator}calendar=connected`;
+    return Response.redirect(finalUrl);
   } catch (err) {
     console.error("Calendar callback error:", err);
     return Response.redirect(`${baseUrl}/settings?error=calendar_token_failed`);
