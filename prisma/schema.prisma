@@ -90,15 +90,17 @@ model ProtocolPlan {
 }
 
 model Medication {
-  id             String  @id @default(cuid())
+  id             String    @id @default(cuid())
   protocolPlanId String
   name           String
   dosageAmount   Float?
   dosageUnit     String?
   unitStrength   String?
   dosage         String?
-  frequency      String  @default("once_daily")
+  frequency      String    @default("once_daily")
   route          String?
+  startDate      DateTime?
+  endDate        DateTime?
   startDayOffset Int
   durationDays   Int
   timeOfDay      String?
@@ -110,16 +112,17 @@ model Medication {
 }
 
 model Appointment {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   protocolPlanId String
   type           String
+  date           DateTime?
   dayOffset      Int
   exactTime      String?
   duration       Int?
   location       String?
   notes          String?
-  fasting        Boolean  @default(false)
-  critical       Boolean  @default(false)
+  fasting        Boolean   @default(false)
+  critical       Boolean   @default(false)
 
   protocolPlan ProtocolPlan @relation(fields: [protocolPlanId], references: [id], onDelete: Cascade)
 }

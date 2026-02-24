@@ -35,6 +35,8 @@ interface Medication {
   dosage: string | null;
   frequency: string;
   route: string | null;
+  startDate: string | null;
+  endDate: string | null;
   startDayOffset: number;
   durationDays: number;
   timeOfDay: string | null;
@@ -46,6 +48,7 @@ interface Medication {
 interface Appointment {
   id: string;
   type: string;
+  date: string | null;
   dayOffset: number;
   exactTime: string | null;
   notes: string | null;
@@ -229,6 +232,8 @@ function ReviewPageContent() {
             dosage: m.dosage || (m.dosageAmount && m.dosageUnit ? `${m.dosageAmount} ${m.dosageUnit}` : null),
             frequency: m.frequency,
             route: m.route,
+            startDate: m.startDate,
+            endDate: m.endDate,
             startDayOffset: m.startDayOffset,
             durationDays: m.durationDays,
             timeOfDay: m.timeOfDay,
@@ -238,6 +243,7 @@ function ReviewPageContent() {
           })),
           appointments: protocol.appointments.map((a) => ({
             type: a.type,
+            date: a.date,
             dayOffset: a.dayOffset,
             exactTime: a.exactTime,
             notes: a.notes,
@@ -307,6 +313,8 @@ function ReviewPageContent() {
           dosage: m.dosage,
           frequency: m.frequency || "once_daily",
           route: m.route,
+          startDate: m.startDate || null,
+          endDate: m.endDate || null,
           startDayOffset: m.startDayOffset,
           durationDays: m.durationDays,
           timeOfDay: m.timeOfDay,
@@ -317,6 +325,7 @@ function ReviewPageContent() {
         appointments: (p.appointments || []).map((a: any) => ({
           id: a.id,
           type: a.type,
+          date: a.date || null,
           dayOffset: a.dayOffset,
           exactTime: a.exactTime,
           notes: a.notes,
@@ -355,6 +364,8 @@ function ReviewPageContent() {
       dosage: null,
       frequency: "once_daily",
       route: "subcutaneous",
+      startDate: protocol.cycleStartDate,
+      endDate: null,
       startDayOffset: 0,
       durationDays: 10,
       timeOfDay: "evening",
@@ -391,6 +402,7 @@ function ReviewPageContent() {
     const newApt: Appointment = {
       id: generateId(),
       type: "MONITORING",
+      date: protocol.cycleStartDate,
       dayOffset: 0,
       exactTime: "08:00",
       notes: null,
@@ -453,6 +465,8 @@ function ReviewPageContent() {
             dosage: m.dosage || (m.dosageAmount && m.dosageUnit ? `${m.dosageAmount} ${m.dosageUnit}` : null),
             frequency: m.frequency,
             route: m.route,
+            startDate: m.startDate,
+            endDate: m.endDate,
             startDayOffset: m.startDayOffset,
             durationDays: m.durationDays,
             timeOfDay: m.timeOfDay,
@@ -462,6 +476,7 @@ function ReviewPageContent() {
           })),
           appointments: protocol.appointments.map((a) => ({
             type: a.type,
+            date: a.date,
             dayOffset: a.dayOffset,
             exactTime: a.exactTime,
             notes: a.notes,
@@ -549,9 +564,9 @@ function ReviewPageContent() {
         RETRIEVAL: "Egg Retrieval",
         TRANSFER: "Embryo Transfer",
       };
-      const startDate = new Date(protocol.cycleStartDate);
-      startDate.setDate(startDate.getDate() + apt.dayOffset);
-      const dateStr = startDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const dateStr = apt.date 
+        ? new Date(apt.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        : `Day ${apt.dayOffset}`;
       const timeStr = apt.exactTime || "";
       return `${typeLabels[apt.type] || apt.type} (${dateStr}${timeStr ? `, ${timeStr}` : ""})`;
     });
@@ -887,8 +902,10 @@ function ReviewPageContent() {
                       <Label className="text-xs">Start Date</Label>
                       <Input
                         type="date"
-                        value={protocol.cycleStartDate ? getDateFromOffset(protocol.cycleStartDate, med.startDayOffset) : ""}
+                        value={med.startDate || ""}
                         onChange={(e) => {
+                          updateMedication(med.id, "startDate", e.target.value || null);
+                          // Also update startDayOffset for backward compat
                           if (protocol.cycleStartDate && e.target.value) {
                             updateMedication(
                               med.id,
@@ -904,17 +921,20 @@ function ReviewPageContent() {
                     <div className="space-y-2">
                       <Label className="text-xs">
                         End Date
-                        <span className="ml-1 text-muted-foreground">
-                          ({med.durationDays} {med.durationDays === 1 ? "day" : "days"})
-                        </span>
+                        {med.startDate && med.endDate && (
+                          <span className="ml-1 text-muted-foreground">
+                            ({getOffsetFromDate(med.startDate, med.endDate) + 1} {getOffsetFromDate(med.startDate, med.endDate) === 0 ? "day" : "days"})
+                          </span>
+                        )}
                       </Label>
                       <Input
                         type="date"
-                        value={protocol.cycleStartDate ? getDateFromOffset(protocol.cycleStartDate, med.startDayOffset + med.durationDays - 1) : ""}
+                        value={med.endDate || ""}
                         onChange={(e) => {
-                          if (protocol.cycleStartDate && e.target.value) {
-                            const startDate = getDateFromOffset(protocol.cycleStartDate, med.startDayOffset);
-                            const newDuration = getOffsetFromDate(startDate, e.target.value) + 1;
+                          updateMedication(med.id, "endDate", e.target.value || null);
+                          // Also update durationDays for backward compat
+                          if (med.startDate && e.target.value) {
+                            const newDuration = getOffsetFromDate(med.startDate, e.target.value) + 1;
                             updateMedication(
                               med.id,
                               "durationDays",
@@ -1104,24 +1124,26 @@ function ReviewPageContent() {
                     <div className="space-y-2">
                       <Label className="text-xs">
                         Date
-                        {protocol.cycleStartDate && (
-                          <span className="ml-1 text-primary font-medium">
-                            ({formatDateFromOffset(protocol.cycleStartDate, apt.dayOffset)})
+                        {protocol.cycleStartDate && apt.date && (
+                          <span className="ml-1 text-muted-foreground">
+                            (Day {getOffsetFromDate(protocol.cycleStartDate, apt.date)})
                           </span>
                         )}
                       </Label>
                       <Input
-                        type="number"
-                        min={0}
-                        placeholder="Day offset"
-                        value={apt.dayOffset}
-                        onChange={(e) =>
-                          updateAppointment(
-                            apt.id,
-                            "dayOffset",
-                            parseInt(e.target.value) || 0
-                          )
-                        }
+                        type="date"
+                        value={apt.date || ""}
+                        onChange={(e) => {
+                          updateAppointment(apt.id, "date", e.target.value || null);
+                          // Also update dayOffset for backward compat
+                          if (protocol.cycleStartDate && e.target.value) {
+                            updateAppointment(
+                              apt.id,
+                              "dayOffset",
+                              getOffsetFromDate(protocol.cycleStartDate, e.target.value)
+                            );
+                          }
+                        }}
                       />
                     </div>
 

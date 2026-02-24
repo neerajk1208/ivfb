@@ -73,21 +73,18 @@ For EACH medication, look for and include in the "instructions" field:
 
 ## EXTRACTION RULES:
 
-1. **Dates & Cycle Start**: 
-   - IMPORTANT: Day 0 = the FIRST date that has ANY content (medication checkmarks, doses, appointments, or any data)
-   - Do NOT use empty columns as Day 0 - skip them
-   - The cycleStartDate is the FIRST date that has any medication marks or appointments
-   - If calendar shows Feb 5-19 but Feb 5-6 columns are empty, and first medication/appointment is on Feb 7, then cycleStartDate = Feb 7
-   - All offsets are calculated FROM the cycleStartDate:
-     * Something on cycleStartDate has offset 0
-     * Something on the day after cycleStartDate has offset 1
-   - durationDays = COUNT the marked columns (e.g., 13 columns marked = durationDays: 13)
+1. **EXTRACT ACTUAL DATES - THIS IS CRITICAL**:
+   - For medications: Read the ACTUAL DATE from the column header where each medication starts and ends
+   - For appointments: Read the ACTUAL DATE from the column header where the appointment is marked
+   - Use YYYY-MM-DD format (e.g., "2025-02-15")
+   - DO NOT calculate day offsets - just read the dates you see
+   - If calendar shows "Feb 15" as a column header and medication has a mark there, startDate = "2025-02-15"
 
 2. **Reading Calendar Grids**:
+   - Dates are shown as COLUMN HEADERS (e.g., "Feb 15", "Feb 16", "2/15", "2/16")
    - Medications are usually listed in ROWS on the left
-   - Dates are usually COLUMNS across the top
-   - A checkmark (✓, X, or filled box) in a cell means that medication is taken on that date
-   - Match each row's content to the correct column's date
+   - A checkmark (✓, X, or filled box) in a cell means that medication is taken on that column's date
+   - Match each cell to its column's date header
    - BW, U/S, appointments are usually at the TOP or BOTTOM of the grid
 
 3. **Dosages**:
@@ -127,11 +124,13 @@ Return ONLY valid JSON matching this schema:
 ${JSON.stringify(protocolPlanExtractionJsonSchema, null, 2)}
 
 ## CRITICAL REMINDERS:
-- CYCLE START: First date with ACTUAL content, NOT first visible date if empty
-- Count the ACTUAL number of days a medication appears (don't assume)
+- READ ACTUAL DATES from column headers - do NOT calculate offsets
+- For each medication: startDate = first column with mark, endDate = last column with mark
+- For each appointment: date = the column where it's marked
 - Extract EXACT trigger time if shown
 - BW/U/S are appointments, not medications
 - APPOINTMENT TYPES: Read carefully - BW=BLOODWORK, U/S=ULTRASOUND, both=MONITORING, VOR/ER=RETRIEVAL, ET=TRANSFER
+- ONLY include appointments that are EXPLICITLY marked in the document
 - If you can't determine something, set confidence to "low" and add to missingFields
 - Do NOT make up information - only extract what you clearly see`;
 
@@ -194,50 +193,38 @@ export async function extractProtocolFromImage(
               type: "text", 
               text: `Carefully analyze this IVF protocol calendar/document.
 
-STEP 1 - FIND THE TRUE CYCLE START DATE:
-- Look at the calendar grid columns (dates across the top)
-- Find the FIRST column that has ANY content (checkmarks, doses, appointments)
-- SKIP empty columns at the start - they are NOT Day 0
-- The first date with actual data is cycleStartDate (Day 0)
+STEP 1 - READ THE CALENDAR DATES:
+- Look at the column headers - they show dates (e.g., "Feb 15", "Feb 16", "2/15", "2/16")
+- Note the year context (assume current year if not shown)
+- These are the ACTUAL DATES you will extract
 
-STEP 2 - READ THE GRID STRUCTURE:
-- Medications are usually ROWS on the left side
-- Dates are COLUMNS across the top
-- A checkmark/X/filled box means that med is taken on that date
-- Carefully match each cell to its row (medication) and column (date)
+STEP 2 - EXTRACT MEDICATIONS WITH ACTUAL DATES:
+- For each medication row, find which columns have marks/checkmarks
+- startDate = the date from the FIRST column header that has a mark for this medication
+- endDate = the date from the LAST column header that has a mark for this medication
+- Example: If "Gonal-F" row has marks in columns "Feb 15" through "Feb 27":
+  startDate: "2025-02-15", endDate: "2025-02-27"
+- DO NOT calculate offsets - just read the actual dates from column headers
 
-STEP 3 - EXTRACT MEDICATIONS:
-- For each medication row, find which columns have marks/checkmarks/doses
-- startDayOffset = number of days from cycleStartDate to FIRST mark (0 if first mark is on cycle start date)
-- durationDays = COUNT the number of columns with marks (not the span!)
-  * Example: If marks on Feb 15, 16, 17 → durationDays = 3 (count the marks: 3 marks)
-  * Example: If marks on Feb 15 through Feb 27 → count each marked column, durationDays = 13
-  * DO NOT calculate as (lastDay - firstDay + 1), actually COUNT the marked columns
-- IMPORTANT: Look for preparation/mixing instructions near each medication
-  (e.g., "2 powder vials mixed in 1mL liquid") and put them in "instructions" field
+STEP 3 - EXTRACT APPOINTMENTS WITH ACTUAL DATES:
+- ONLY include appointments that are EXPLICITLY marked in the document
+- For each appointment, read the date from its column header
+- date = the ACTUAL date where this appointment is marked
+- Example: If "BW" is marked in the "Feb 17" column:
+  type: "BLOODWORK", date: "2025-02-17"
+- Type mapping:
+  * "BW" alone = BLOODWORK
+  * "U/S" alone = ULTRASOUND
+  * "BW + U/S" or "Monitoring" = MONITORING
+  * "VOR", "ER", "Retrieval" = RETRIEVAL
+  * "ET", "Transfer" = TRANSFER
+  * "Trigger" = TRIGGER
+- Do NOT invent appointments - only extract what's explicitly shown
 
-STEP 4 - EXTRACT APPOINTMENTS (ONLY WHAT'S EXPLICITLY SHOWN!):
-- ONLY extract appointments that are EXPLICITLY marked in the image
-- Do NOT invent or assume appointments - if nothing is marked for a day, there is NO appointment
-- If unsure whether something is an appointment, DO NOT include it
-- dayOffset = days from cycle start date to appointment date
-  * If cycle starts Feb 15 and appointment is Feb 15, dayOffset = 0
-  * If cycle starts Feb 15 and appointment is Feb 16, dayOffset = 1
-  * If cycle starts Feb 15 and appointment is Feb 20, dayOffset = 5
-- Type mapping (ONLY if explicitly labeled):
-  * "BW" alone = type: "BLOODWORK"
-  * "U/S" alone = type: "ULTRASOUND"
-  * "BW + U/S" or "Monitoring" = type: "MONITORING"
-  * "VOR", "ER", "Retrieval" = type: "RETRIEVAL"
-  * "ET", "Transfer" = type: "TRANSFER"
-  * "Trigger" with time = type: "TRIGGER"
-- Do NOT add appointments that aren't clearly marked in the document
-
-STEP 5 - VERIFY:
-- Double-check that cycleStartDate matches first date with content
-- Verify each appointment is ACTUALLY marked in the image - remove any you're not 100% certain about
+STEP 4 - VERIFY:
+- Double-check each date matches its column header
 - Verify appointment types match what's written
-- Verify durationDays by counting marked columns
+- Remove any appointments you're not 100% certain about
 
 Return JSON only.` 
             },
@@ -273,6 +260,60 @@ Return JSON only.`
   }
 }
 
+function computeCycleStartDate(medications: any[], appointments: any[]): string | null {
+  const allDates: string[] = [];
+  
+  for (const med of medications) {
+    if (med.startDate) allDates.push(med.startDate);
+  }
+  for (const apt of appointments) {
+    if (apt.date) allDates.push(apt.date);
+  }
+  
+  if (allDates.length === 0) return null;
+  
+  // Sort dates and return the earliest
+  allDates.sort();
+  return allDates[0];
+}
+
+function daysBetween(date1: string, date2: string): number {
+  const d1 = new Date(date1);
+  const d2 = new Date(date2);
+  const diffTime = d2.getTime() - d1.getTime();
+  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+}
+
+function processMedicationDates(med: any, cycleStartDate: string): any {
+  const processed = { ...med };
+  
+  if (med.startDate && cycleStartDate) {
+    processed.startDayOffset = daysBetween(cycleStartDate, med.startDate);
+  } else {
+    processed.startDayOffset = med.startDayOffset ?? 0;
+  }
+  
+  if (med.startDate && med.endDate) {
+    processed.durationDays = daysBetween(med.startDate, med.endDate) + 1;
+  } else {
+    processed.durationDays = med.durationDays ?? 1;
+  }
+  
+  return processed;
+}
+
+function processAppointmentDates(apt: any, cycleStartDate: string): any {
+  const processed = { ...apt };
+  
+  if (apt.date && cycleStartDate) {
+    processed.dayOffset = daysBetween(cycleStartDate, apt.date);
+  } else {
+    processed.dayOffset = apt.dayOffset ?? 0;
+  }
+  
+  return processed;
+}
+
 function parseAndValidate(content: string): ProtocolPlanExtraction {
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
@@ -288,16 +329,29 @@ function parseAndValidate(content: string): ProtocolPlanExtraction {
     return getFailedExtraction("Invalid JSON in response");
   }
 
-  // Ensure appointments array exists (backwards compatibility)
-  if (!parsed.appointments) {
-    parsed.appointments = [];
-  }
-  if (!parsed.milestones) {
-    parsed.milestones = [];
-  }
+  // Ensure arrays exist
+  if (!parsed.medications) parsed.medications = [];
+  if (!parsed.appointments) parsed.appointments = [];
+  if (!parsed.milestones) parsed.milestones = [];
+  
+  // Compute cycleStartDate from all extracted dates
+  const cycleStartDate = computeCycleStartDate(parsed.medications, parsed.appointments);
+  parsed.cycleStartDate = cycleStartDate;
+  
+  // Process medications: compute offsets from dates
+  parsed.medications = parsed.medications.map((med: any) => 
+    processMedicationDates(med, cycleStartDate || "")
+  );
+  
+  // Process appointments: compute offsets from dates
+  parsed.appointments = parsed.appointments.map((apt: any) => 
+    processAppointmentDates(apt, cycleStartDate || "")
+  );
+  
   if (!parsed.confidence?.appointments) {
     parsed.confidence = {
       ...parsed.confidence,
+      cycleStartDate: cycleStartDate ? "high" : "low",
       appointments: parsed.confidence?.milestones || "low",
     };
   }
@@ -310,7 +364,11 @@ function parseAndValidate(content: string): ProtocolPlanExtraction {
     return {
       cycleStartDate: parsed.cycleStartDate || null,
       medications: Array.isArray(parsed.medications) ? parsed.medications.map(normalizeMedication) : [],
-      appointments: Array.isArray(parsed.appointments) ? parsed.appointments : [],
+      appointments: Array.isArray(parsed.appointments) ? parsed.appointments.map((apt: any) => ({
+        ...apt,
+        date: apt.date || null,
+        dayOffset: apt.dayOffset ?? 0,
+      })) : [],
       milestones: Array.isArray(parsed.milestones) ? parsed.milestones : [],
       notes: parsed.notes || null,
       confidence: {
@@ -322,14 +380,20 @@ function parseAndValidate(content: string): ProtocolPlanExtraction {
     };
   }
 
-  // Clean medication names in validated data
+  // Clean medication names and ensure all fields
   const cleanedData = {
     ...validated.data,
     medications: validated.data.medications.map(med => ({
       ...med,
       name: cleanMedicationName(med.name),
+      startDate: (med as any).startDate || null,
+      endDate: (med as any).endDate || null,
       unitStrength: (med as any).unitStrength || null,
       doses: (med as any).doses || null,
+    })),
+    appointments: validated.data.appointments.map(apt => ({
+      ...apt,
+      date: (apt as any).date || null,
     })),
   };
 
@@ -375,6 +439,8 @@ function normalizeMedication(med: any): any {
     dosage: med.dosage || null,
     frequency: med.frequency || "once_daily",
     route: med.route || null,
+    startDate: med.startDate || null,
+    endDate: med.endDate || null,
     startDayOffset: typeof med.startDayOffset === "number" ? med.startDayOffset : 0,
     durationDays: typeof med.durationDays === "number" && med.durationDays > 0 ? med.durationDays : 1,
     timeOfDay: med.timeOfDay || null,

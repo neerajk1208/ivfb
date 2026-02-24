@@ -42,6 +42,8 @@ export async function POST(request: NextRequest) {
         dosage: m.dosage || null,
         frequency: "once_daily",
         route: null,
+        startDate: null,
+        endDate: null,
         startDayOffset: m.startDayOffset,
         durationDays: m.durationDays,
         timeOfDay: (m.timeOfDay as "morning" | "afternoon" | "evening" | "bedtime") || null,

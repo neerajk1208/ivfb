@@ -55,8 +55,12 @@ export const medicationExtractionSchema = z.object({
   dosage: z.string().nullable(), // Fallback if can't parse amount/unit
   frequency: z.string().default("once_daily"),
   route: z.string().nullable(),
-  startDayOffset: z.number().int().min(0),
-  durationDays: z.number().int().min(1),
+  // New: actual dates from image
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  // Legacy: computed from dates
+  startDayOffset: z.number().int().min(0).optional(),
+  durationDays: z.number().int().min(1).optional(),
   timeOfDay: z
     .enum(["morning", "afternoon", "evening", "bedtime"])
     .nullable(),
@@ -70,7 +74,10 @@ export const medicationExtractionSchema = z.object({
 
 export const appointmentExtractionSchema = z.object({
   type: appointmentTypeSchema,
-  dayOffset: z.number().int().min(0),
+  // New: actual date from image
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  // Legacy: computed from date
+  dayOffset: z.number().int().min(0).optional(),
   exactTime: z
     .string()
     .regex(/^([01]\d|2[0-3]):([0-5]\d)$/)
@@ -124,20 +131,25 @@ export type ProtocolPlanExtraction = z.infer<typeof protocolPlanExtractionSchema
 export const protocolPlanExtractionJsonSchema = {
   type: "object",
   properties: {
-    cycleStartDate: {
-      type: ["string", "null"],
-      pattern: "^\\d{4}-\\d{2}-\\d{2}$",
-      description: "First date shown on calendar in YYYY-MM-DD format",
-    },
     medications: {
       type: "array",
-      description: "All medications with their schedules",
+      description: "All medications with their schedules - extract ACTUAL DATES from the calendar",
       items: {
         type: "object",
         properties: {
           name: { 
             type: "string",
             description: "Full medication name (e.g., 'Gonal-F', 'Menopur', 'Cetrotide')"
+          },
+          startDate: {
+            type: "string",
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+            description: "ACTUAL first date this medication appears in YYYY-MM-DD format - read directly from calendar column header"
+          },
+          endDate: {
+            type: "string",
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+            description: "ACTUAL last date this medication appears in YYYY-MM-DD format - read directly from calendar column header"
           },
           dosageAmount: { 
             type: ["number", "null"],
@@ -166,16 +178,6 @@ export const protocolPlanExtractionJsonSchema = {
             enum: ["subcutaneous", "intramuscular", "oral", "vaginal", "patch", "nasal", null],
             description: "How medication is administered"
           },
-          startDayOffset: { 
-            type: "integer", 
-            minimum: 0,
-            description: "Days from cycle start to first day medication appears. 0 = medication starts on cycle start date."
-          },
-          durationDays: { 
-            type: "integer", 
-            minimum: 1,
-            description: "Count of days medication appears. If med shows Feb 15-17, that's 3 days (count the marks, not the span)."
-          },
           timeOfDay: {
             type: ["string", "null"],
             enum: ["morning", "afternoon", "evening", "bedtime", null],
@@ -203,12 +205,12 @@ export const protocolPlanExtractionJsonSchema = {
             description: "Special instructions (e.g., 'take with food', 'rotate injection sites', 'mix 2 vials in 1mL')"
           },
         },
-        required: ["name", "startDayOffset", "durationDays"],
+        required: ["name", "startDate", "endDate"],
       },
     },
     appointments: {
       type: "array",
-      description: "All scheduled appointments (bloodwork, ultrasound, procedures)",
+      description: "ONLY appointments explicitly shown in the document - extract ACTUAL DATE",
       items: {
         type: "object",
         properties: {
@@ -217,10 +219,10 @@ export const protocolPlanExtractionJsonSchema = {
             enum: ["BLOODWORK", "ULTRASOUND", "MONITORING", "TRIGGER", "RETRIEVAL", "TRANSFER", "CONSULTATION", "OTHER"],
             description: "Type of appointment"
           },
-          dayOffset: { 
-            type: "integer", 
-            minimum: 0,
-            description: "Days from cycle start date to appointment. 0 = appointment is on cycle start date, 1 = next day, etc."
+          date: {
+            type: "string",
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+            description: "ACTUAL date of appointment in YYYY-MM-DD format - read directly from calendar"
           },
           exactTime: {
             type: ["string", "null"],
@@ -239,7 +241,7 @@ export const protocolPlanExtractionJsonSchema = {
             description: "True for time-sensitive appointments (trigger shot, retrieval, transfer)"
           },
         },
-        required: ["type", "dayOffset"],
+        required: ["type", "date"],
       },
     },
     milestones: {
@@ -270,7 +272,7 @@ export const protocolPlanExtractionJsonSchema = {
         medications: { type: "string", enum: ["high", "medium", "low"] },
         appointments: { type: "string", enum: ["high", "medium", "low"] },
       },
-      required: ["cycleStartDate", "medications", "appointments"],
+      required: ["medications", "appointments"],
     },
     missingFields: {
       type: "array",

@@ -52,8 +52,10 @@ export async function saveProtocolPlanDraft(input: SaveProtocolDraftInput) {
           dosage: med.dosage,
           frequency: med.frequency || "once_daily",
           route: med.route,
-          startDayOffset: med.startDayOffset,
-          durationDays: med.durationDays,
+          startDate: (med as any).startDate ? new Date((med as any).startDate) : null,
+          endDate: (med as any).endDate ? new Date((med as any).endDate) : null,
+          startDayOffset: med.startDayOffset ?? 0,
+          durationDays: med.durationDays ?? 1,
           timeOfDay: med.timeOfDay,
           exactTime: med.exactTime,
           doses: (med as any).doses ? ((med as any).doses as any) : undefined,
@@ -63,7 +65,8 @@ export async function saveProtocolPlanDraft(input: SaveProtocolDraftInput) {
       appointments: {
         create: (extraction.appointments || []).map((apt) => ({
           type: apt.type,
-          dayOffset: apt.dayOffset,
+          date: (apt as any).date ? new Date((apt as any).date) : null,
+          dayOffset: apt.dayOffset ?? 0,
           exactTime: apt.exactTime,
           notes: apt.notes,
           fasting: apt.fasting || false,
@@ -116,6 +119,8 @@ export interface MedicationInput {
   dosage?: string | null;
   frequency?: string | null;
   route?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
   startDayOffset: number;
   durationDays: number;
   timeOfDay?: string | null;
@@ -126,6 +131,7 @@ export interface MedicationInput {
 
 export interface AppointmentInput {
   type: string;
+  date?: string | null;
   dayOffset: number;
   exactTime?: string | null;
   notes?: string | null;
@@ -183,6 +189,8 @@ export async function updateProtocolPlanFromReview(
           dosage: med.dosage || null,
           frequency: med.frequency || "once_daily",
           route: med.route || null,
+          startDate: med.startDate ? new Date(med.startDate) : null,
+          endDate: med.endDate ? new Date(med.endDate) : null,
           startDayOffset: med.startDayOffset,
           durationDays: med.durationDays,
           timeOfDay: med.timeOfDay || null,
@@ -194,6 +202,7 @@ export async function updateProtocolPlanFromReview(
       appointments: {
         create: (data.appointments || []).map((apt) => ({
           type: apt.type,
+          date: apt.date ? new Date(apt.date) : null,
           dayOffset: apt.dayOffset,
           exactTime: apt.exactTime || null,
           notes: apt.notes || null,
