@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Pill, Calendar, AlertCircle, CalendarPlus, Bell, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, Pill, Calendar, AlertCircle, CalendarPlus, Bell, CheckCircle2, Check, Sparkles } from "lucide-react";
 import { Paywall } from "@/components/Paywall";
 
 interface Dose {
@@ -184,6 +184,18 @@ function ReviewPageContent() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [shouldAutoConfirm, setShouldAutoConfirm] = useState(false);
   const [autoConfirmStatus, setAutoConfirmStatus] = useState<string | null>(null);
+  
+  // Confirmation progress state
+  const [showConfirmProgress, setShowConfirmProgress] = useState(false);
+  const [confirmProgressStep, setConfirmProgressStep] = useState(0);
+  const [confirmError, setConfirmError] = useState("");
+
+  const CONFIRM_STEPS = [
+    { id: 1, label: "Creating your care plan" },
+    { id: 2, label: "Scheduling medication reminders" },
+    { id: 3, label: "Adding appointments" },
+    { id: 4, label: "Finalizing your schedule" },
+  ];
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -214,14 +226,29 @@ function ReviewPageContent() {
     }
   }, [shouldAutoConfirm, protocol, isSubscribed, isConfirming]);
 
+  const advanceConfirmSteps = async (startStep: number, endStep: number) => {
+    for (let i = startStep; i <= endStep; i++) {
+      setConfirmProgressStep(i);
+      if (i < endStep) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+    }
+  };
+
   const handleConfirmAfterPayment = async () => {
     if (!protocol) {
       setAutoConfirmStatus("error: no protocol");
       return;
     }
+    
+    setShowConfirmProgress(true);
+    setConfirmProgressStep(1);
+    setConfirmError("");
     setIsConfirming(true);
+    
     try {
-      const res = await fetch("/api/protocol/confirm", {
+      // Start API call and advance steps in parallel
+      const confirmPromise = fetch("/api/protocol/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -256,16 +283,28 @@ function ReviewPageContent() {
           notes: protocol.notes,
         }),
       });
+
+      // Advance through steps while waiting
+      await advanceConfirmSteps(1, 3);
+      
+      const res = await confirmPromise;
       const data = await res.json();
+      
       if (!res.ok) {
         setAutoConfirmStatus(`error: ${data.error || "API error"}`);
         throw new Error(data.error || "Failed to confirm protocol");
       }
+      
+      // Final step
+      setConfirmProgressStep(4);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       setAutoConfirmStatus("success");
+      setShowConfirmProgress(false);
       setShowPushStep(true);
     } catch (err) {
       setAutoConfirmStatus(`catch: ${err instanceof Error ? err.message : "unknown"}`);
-      setError(err instanceof Error ? err.message : "Failed to confirm protocol");
+      setConfirmError(err instanceof Error ? err.message : "Failed to confirm protocol");
     } finally {
       setIsConfirming(false);
     }
@@ -451,10 +490,14 @@ function ReviewPageContent() {
     }
 
     setError("");
+    setShowConfirmProgress(true);
+    setConfirmProgressStep(1);
+    setConfirmError("");
     setIsConfirming(true);
 
     try {
-      const res = await fetch("/api/protocol/confirm", {
+      // Start API call and advance steps in parallel
+      const confirmPromise = fetch("/api/protocol/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -490,14 +533,24 @@ function ReviewPageContent() {
         }),
       });
 
+      // Advance through steps while waiting
+      await advanceConfirmSteps(1, 3);
+      
+      const res = await confirmPromise;
       const data = await res.json();
+      
       if (!res.ok) {
         throw new Error(data.error || "Failed to confirm protocol");
       }
 
+      // Final step
+      setConfirmProgressStep(4);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      setShowConfirmProgress(false);
       setShowPushStep(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setConfirmError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setIsConfirming(false);
     }
@@ -522,10 +575,150 @@ function ReviewPageContent() {
     );
   }
 
-  if (autoConfirmStatus === "confirming") {
+  // Confirmation progress screen
+  if (showConfirmProgress) {
+    const allComplete = confirmProgressStep > CONFIRM_STEPS.length;
+    
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Setting up your reminders...</div>
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 bg-gradient-to-b from-background to-primary/5">
+        <div className="max-w-md w-full space-y-8">
+          {/* Animated icon */}
+          <div className="flex justify-center">
+            <div className="relative">
+              {/* Sparkle effects */}
+              <div className="absolute -top-2 -right-2">
+                <Sparkles 
+                  className="w-6 h-6 text-primary/40 animate-pulse" 
+                  style={{ animationDuration: '2s' }}
+                />
+              </div>
+              <div className="absolute -bottom-1 -left-2">
+                <Sparkles 
+                  className="w-5 h-5 text-primary/30 animate-pulse" 
+                  style={{ animationDuration: '2.5s', animationDelay: '0.5s' }}
+                />
+              </div>
+              {/* Main icon */}
+              <div className="w-24 h-24 bg-primary/10 rounded-2xl flex items-center justify-center">
+                <Bell className="w-12 h-12 text-primary" />
+                {/* Completion checkmark */}
+                {confirmProgressStep >= CONFIRM_STEPS.length && (
+                  <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center animate-in zoom-in duration-300">
+                    <Check className="w-5 h-5 text-white" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Title */}
+          <div className="text-center space-y-2">
+            <h1 className="text-2xl font-semibold">
+              {confirmProgressStep >= CONFIRM_STEPS.length ? "You're All Set!" : "Setting Up Your Reminders"}
+            </h1>
+            <p className="text-muted-foreground">
+              {confirmProgressStep >= CONFIRM_STEPS.length 
+                ? "Your personalized care plan is ready" 
+                : "Creating your personalized care plan..."}
+            </p>
+          </div>
+
+          {/* Progress steps */}
+          <Card className="border-0 shadow-lg bg-card/80 backdrop-blur">
+            <CardContent className="pt-6 pb-4">
+              <div className="space-y-4">
+                {CONFIRM_STEPS.map((step) => {
+                  const isComplete = confirmProgressStep > step.id;
+                  const isCurrent = confirmProgressStep === step.id;
+                  const isPending = confirmProgressStep < step.id;
+
+                  return (
+                    <div 
+                      key={step.id}
+                      className={`flex items-center gap-4 transition-all duration-500 ${
+                        isPending ? 'opacity-40' : 'opacity-100'
+                      }`}
+                    >
+                      {/* Step indicator */}
+                      <div className={`
+                        w-8 h-8 rounded-full flex items-center justify-center shrink-0
+                        transition-all duration-500
+                        ${isComplete 
+                          ? 'bg-green-500 text-white' 
+                          : isCurrent 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-muted text-muted-foreground'
+                        }
+                      `}>
+                        {isComplete ? (
+                          <Check className="w-4 h-4" />
+                        ) : isCurrent ? (
+                          <div className="w-3 h-3 bg-primary-foreground rounded-full animate-pulse" />
+                        ) : (
+                          <span className="text-xs font-medium">{step.id}</span>
+                        )}
+                      </div>
+
+                      {/* Step label */}
+                      <span className={`text-sm transition-all duration-300 ${
+                        isComplete 
+                          ? 'text-green-600 font-medium' 
+                          : isCurrent 
+                            ? 'text-foreground font-medium' 
+                            : 'text-muted-foreground'
+                      }`}>
+                        {step.label}
+                        {isCurrent && (
+                          <span className="inline-block ml-1 animate-pulse">...</span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Error state */}
+          {confirmError && (
+            <Card className="border-destructive/50 bg-destructive/5">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                  <div className="space-y-2">
+                    <p className="text-sm text-destructive">{confirmError}</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setShowConfirmProgress(false);
+                        setConfirmError("");
+                        setConfirmProgressStep(0);
+                        setIsConfirming(false);
+                      }}
+                    >
+                      Try again
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Summary */}
+          {!confirmError && protocol && (
+            <div className="flex justify-center gap-6 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <Pill className="w-4 h-4" />
+                {protocol.medications.length} medications
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Calendar className="w-4 h-4" />
+                {protocol.appointments.length} appointments
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
