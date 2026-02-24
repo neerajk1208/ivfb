@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Upload, FileText, Image, AlertCircle } from "lucide-react";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+const ACCEPTED_TYPES: Record<string, string> = {
+  "application/pdf": "PDF",
+  "image/jpeg": "IMAGE",
+  "image/jpg": "IMAGE",
+  "image/png": "IMAGE",
+  "image/webp": "IMAGE",
+  "image/heic": "IMAGE",
+  "image/heif": "IMAGE",
+};
 
 const COMMON_TIMEZONES = [
   { value: "America/New_York", label: "Eastern Time (ET)" },
@@ -37,6 +50,12 @@ export default function OnboardingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [checkingCycle, setCheckingCycle] = useState(true);
+  
+  // Upload state
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
 
   useEffect(() => {
     // Auto-detect timezone from browser
@@ -70,6 +89,115 @@ export default function OnboardingPage() {
         });
     }
   }, [status, router]);
+
+  const validateFile = (file: File): string | null => {
+    if (!(file.type in ACCEPTED_TYPES)) {
+      return "Please upload a PDF or image file (JPG, PNG, WEBP, HEIC)";
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      return `File is too large. Maximum size is 10MB (yours is ${(file.size / 1024 / 1024).toFixed(1)}MB)`;
+    }
+    return null;
+  };
+
+  const processFile = async (file: File) => {
+    const validationError = validateFile(file);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setError("");
+    setIsUploading(true);
+    setUploadProgress("Uploading...");
+
+    try {
+      const kind = ACCEPTED_TYPES[file.type];
+
+      const createRes = await fetch("/api/uploads/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind,
+          mimeType: file.type,
+        }),
+      });
+
+      const createData = await createRes.json();
+      if (!createRes.ok) {
+        throw new Error(createData.error || "Failed to initiate upload");
+      }
+
+      const { uploadId } = createData.data;
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("uploadId", uploadId);
+
+      const uploadRes = await fetch("/api/uploads/file", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        const uploadData = await uploadRes.json();
+        throw new Error(uploadData.error || "Failed to upload file");
+      }
+
+      setIsUploading(false);
+      setIsProcessing(true);
+      setUploadProgress("Analyzing your protocol...");
+
+      const finalizeRes = await fetch("/api/uploads/finalize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploadId }),
+      });
+
+      const contentType = finalizeRes.headers.get("content-type");
+      if (!contentType?.includes("application/json")) {
+        throw new Error("Server error. Please try again.");
+      }
+
+      const finalizeData = await finalizeRes.json();
+      if (!finalizeRes.ok) {
+        throw new Error(finalizeData.error || "Failed to process file");
+      }
+
+      router.push("/onboarding/review");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+      setIsUploading(false);
+      setIsProcessing(false);
+      setUploadProgress("");
+    }
+  };
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const droppedFile = e.dataTransfer.files[0];
+    if (droppedFile) {
+      processFile(droppedFile);
+    }
+  }, []);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      processFile(selectedFile);
+    }
+  };
 
   if (status === "loading" || checkingCycle) {
     return (
@@ -175,70 +303,92 @@ export default function OnboardingPage() {
         {step === 2 && (
           <Card className="border shadow-sm">
             <CardHeader>
-              <CardTitle className="text-lg">Add Your Protocol</CardTitle>
+              <CardTitle className="text-lg">Upload Your Protocol</CardTitle>
               <CardDescription>
-                Share your clinic&apos;s medication plan so we can set up your reminders
+                Share your clinic&apos;s medication plan and we&apos;ll set up your reminders automatically
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Button
-                variant="outline"
-                className="w-full h-24 flex flex-col items-center justify-center space-y-2"
-                onClick={() => router.push("/onboarding/upload")}
-              >
-                <svg
-                  className="w-8 h-8 text-muted-foreground"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-                  />
-                </svg>
-                <span className="font-medium">Upload clinic plan</span>
-                <span className="text-xs text-muted-foreground">
-                  PDF or photo of your protocol
-                </span>
-              </Button>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
+              {isUploading || isProcessing ? (
+                <div className="py-12 text-center space-y-4">
+                  <div className="w-12 h-12 mx-auto border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  <div className="space-y-1">
+                    <p className="font-medium">{uploadProgress}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {isProcessing 
+                        ? "This may take a moment..." 
+                        : "Please wait..."}
+                    </p>
+                  </div>
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">
-                    or
-                  </span>
-                </div>
-              </div>
-
-              <Button
-                variant="outline"
-                className="w-full h-24 flex flex-col items-center justify-center space-y-2"
-                onClick={() => router.push("/onboarding/intake")}
-              >
-                <svg
-                  className="w-8 h-8 text-muted-foreground"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+              ) : (
+                <div
+                  className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer hover:border-primary/50 hover:bg-primary/5 ${
+                    isDragging
+                      ? "border-primary bg-primary/10"
+                      : "border-muted-foreground/25"
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => document.getElementById("file-input")?.click()}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                  <input
+                    id="file-input"
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
+                    onChange={handleFileSelect}
                   />
-                </svg>
-                <span className="font-medium">Enter manually</span>
-                <span className="text-xs text-muted-foreground">
-                  Answer a few quick questions
-                </span>
-              </Button>
+                  
+                  <div className="space-y-4">
+                    <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center">
+                      <Upload className="w-8 h-8 text-primary" />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <p className="font-medium">
+                        {isDragging ? "Drop your file here" : "Drop your protocol here"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        or <span className="text-primary font-medium">browse files</span>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5" />
+                        PDF
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Image className="w-3.5 h-3.5" />
+                        JPG, PNG, WEBP, HEIC
+                      </span>
+                    </div>
+                    
+                    <p className="text-xs text-muted-foreground">
+                      Maximum file size: 10MB
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 text-destructive">
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <p className="text-sm">{error}</p>
+                </div>
+              )}
+
+              {!isUploading && !isProcessing && (
+                <Button
+                  variant="ghost"
+                  className="w-full text-muted-foreground"
+                  onClick={() => setStep(1)}
+                >
+                  Back
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}
