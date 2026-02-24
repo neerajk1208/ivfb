@@ -4,10 +4,10 @@ import { formatInTimeZone, toZonedTime, fromZonedTime } from "date-fns-tz";
 export const DEFAULT_TIMEZONE = "America/Los_Angeles";
 
 export const DEFAULT_TIMES = {
-  morning: { hour: 9, minute: 0 },
+  morning: { hour: 8, minute: 0 },
   afternoon: { hour: 13, minute: 0 },
-  evening: { hour: 20, minute: 30 },
-  bedtime: { hour: 22, minute: 0 },
+  evening: { hour: 18, minute: 0 },
+  bedtime: { hour: 21, minute: 0 },
   checkin: { hour: 19, minute: 0 },
 } as const;
 
