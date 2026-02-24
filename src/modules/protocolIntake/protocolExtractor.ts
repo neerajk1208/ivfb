@@ -76,9 +76,12 @@ For EACH medication, look for and include in the "instructions" field:
 1. **Dates & Cycle Start**: 
    - IMPORTANT: Day 0 = the FIRST date that has ANY content (medication checkmarks, doses, appointments, or any data)
    - Do NOT use empty columns as Day 0 - skip them
-   - If calendar shows Feb 5-19 but Feb 5-6 columns are empty, and first medication/appointment is on Feb 7, then Feb 7 is Day 0
-   - Look at the grid carefully: which column has the FIRST checkmark, number, or appointment marker?
-   - Count consecutive days the medication appears for durationDays
+   - The cycleStartDate is the FIRST date that has any medication marks or appointments
+   - If calendar shows Feb 5-19 but Feb 5-6 columns are empty, and first medication/appointment is on Feb 7, then cycleStartDate = Feb 7
+   - All offsets are calculated FROM the cycleStartDate:
+     * Something on cycleStartDate has offset 0
+     * Something on the day after cycleStartDate has offset 1
+   - durationDays = COUNT the marked columns (e.g., 13 columns marked = durationDays: 13)
 
 2. **Reading Calendar Grids**:
    - Medications are usually listed in ROWS on the left
@@ -204,24 +207,37 @@ STEP 2 - READ THE GRID STRUCTURE:
 - Carefully match each cell to its row (medication) and column (date)
 
 STEP 3 - EXTRACT MEDICATIONS:
-- For each medication row, find which columns have marks
-- startDayOffset = number of days from cycleStartDate to first mark
-- durationDays = count of consecutive days with marks
+- For each medication row, find which columns have marks/checkmarks/doses
+- startDayOffset = number of days from cycleStartDate to FIRST mark (0 if first mark is on cycle start date)
+- durationDays = COUNT the number of columns with marks (not the span!)
+  * Example: If marks on Feb 15, 16, 17 → durationDays = 3 (count the marks: 3 marks)
+  * Example: If marks on Feb 15 through Feb 27 → count each marked column, durationDays = 13
+  * DO NOT calculate as (lastDay - firstDay + 1), actually COUNT the marked columns
 - IMPORTANT: Look for preparation/mixing instructions near each medication
   (e.g., "2 powder vials mixed in 1mL liquid") and put them in "instructions" field
 
-STEP 4 - EXTRACT APPOINTMENTS (TYPE MATTERS!):
-- "BW" alone = type: "BLOODWORK"
-- "U/S" alone = type: "ULTRASOUND"
-- "BW + U/S" or "Monitoring" = type: "MONITORING"
-- "VOR", "ER", "Retrieval" = type: "RETRIEVAL"
-- "ET", "Transfer" = type: "TRANSFER"
-- "Trigger" with time = type: "TRIGGER"
-- Do NOT default everything to MONITORING
+STEP 4 - EXTRACT APPOINTMENTS (ONLY WHAT'S EXPLICITLY SHOWN!):
+- ONLY extract appointments that are EXPLICITLY marked in the image
+- Do NOT invent or assume appointments - if nothing is marked for a day, there is NO appointment
+- If unsure whether something is an appointment, DO NOT include it
+- dayOffset = days from cycle start date to appointment date
+  * If cycle starts Feb 15 and appointment is Feb 15, dayOffset = 0
+  * If cycle starts Feb 15 and appointment is Feb 16, dayOffset = 1
+  * If cycle starts Feb 15 and appointment is Feb 20, dayOffset = 5
+- Type mapping (ONLY if explicitly labeled):
+  * "BW" alone = type: "BLOODWORK"
+  * "U/S" alone = type: "ULTRASOUND"
+  * "BW + U/S" or "Monitoring" = type: "MONITORING"
+  * "VOR", "ER", "Retrieval" = type: "RETRIEVAL"
+  * "ET", "Transfer" = type: "TRANSFER"
+  * "Trigger" with time = type: "TRIGGER"
+- Do NOT add appointments that aren't clearly marked in the document
 
 STEP 5 - VERIFY:
 - Double-check that cycleStartDate matches first date with content
+- Verify each appointment is ACTUALLY marked in the image - remove any you're not 100% certain about
 - Verify appointment types match what's written
+- Verify durationDays by counting marked columns
 
 Return JSON only.` 
             },

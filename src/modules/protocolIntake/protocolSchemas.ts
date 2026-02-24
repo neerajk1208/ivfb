@@ -169,12 +169,12 @@ export const protocolPlanExtractionJsonSchema = {
           startDayOffset: { 
             type: "integer", 
             minimum: 0,
-            description: "Day number when medication starts (0 = first day on calendar)"
+            description: "Days from cycle start to first day medication appears. 0 = medication starts on cycle start date."
           },
           durationDays: { 
             type: "integer", 
             minimum: 1,
-            description: "Total number of days medication is taken"
+            description: "Count of days medication appears. If med shows Feb 15-17, that's 3 days (count the marks, not the span)."
           },
           timeOfDay: {
             type: ["string", "null"],
@@ -220,7 +220,7 @@ export const protocolPlanExtractionJsonSchema = {
           dayOffset: { 
             type: "integer", 
             minimum: 0,
-            description: "Day number (0 = first day on calendar)"
+            description: "Days from cycle start date to appointment. 0 = appointment is on cycle start date, 1 = next day, etc."
           },
           exactTime: {
             type: ["string", "null"],
