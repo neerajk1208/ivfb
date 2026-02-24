@@ -1,11 +1,8 @@
-const CACHE_NAME = "ivf-buddy-v2";
+const CACHE_NAME = "ivf-buddy-v3";
 const OFFLINE_URL = "/offline.html";
 
 // Only cache static assets and pages that don't depend on auth state
 const PRECACHE_URLS = [
-  "/today",
-  "/chat",
-  "/settings",
   "/offline.html",
 ];
 
@@ -19,7 +16,8 @@ const NO_CACHE_PATHS = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_URLS);
+      // Don't fail installation if precaching fails
+      return cache.addAll(PRECACHE_URLS).catch(() => {});
     })
   );
   self.skipWaiting();
@@ -49,8 +47,7 @@ self.addEventListener("fetch", (event) => {
   );
   
   if (shouldSkipCache) {
-    // Network only for auth pages
-    event.respondWith(fetch(event.request));
+    // Network only for auth pages - don't intercept, let browser handle normally
     return;
   }
   
