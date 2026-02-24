@@ -41,10 +41,17 @@ export const appointmentTypeSchema = z.enum([
   "OTHER",
 ]);
 
+export const doseSchema = z.object({
+  doseNumber: z.number().int().min(1),
+  timeOfDay: z.enum(["morning", "afternoon", "evening", "bedtime"]).nullable(),
+  exactTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).nullable(),
+});
+
 export const medicationExtractionSchema = z.object({
   name: z.string(),
   dosageAmount: z.number().positive().nullable(),
   dosageUnit: z.string().nullable(),
+  unitStrength: z.string().nullable(), // e.g., "2mg" per pill
   dosage: z.string().nullable(), // Fallback if can't parse amount/unit
   frequency: z.string().default("once_daily"),
   route: z.string().nullable(),
@@ -57,6 +64,7 @@ export const medicationExtractionSchema = z.object({
     .string()
     .regex(/^([01]\d|2[0-3]):([0-5]\d)$/)
     .nullable(),
+  doses: z.array(doseSchema).nullable(), // For multiple doses per day
   instructions: z.string().nullable(),
 });
 
@@ -140,6 +148,10 @@ export const protocolPlanExtractionJsonSchema = {
             enum: ["IU", "mg", "mcg", "mL", "pills", "patches", "units", null],
             description: "Unit of measurement"
           },
+          unitStrength: {
+            type: ["string", "null"],
+            description: "Strength per unit (e.g., '2mg' per pill, '75IU' per vial)"
+          },
           dosage: { 
             type: ["string", "null"],
             description: "Full dosage string as fallback (e.g., '225 IU')"
@@ -171,11 +183,24 @@ export const protocolPlanExtractionJsonSchema = {
           exactTime: {
             type: ["string", "null"],
             pattern: "^([01]\\d|2[0-3]):([0-5]\\d)$",
-            description: "Exact time in HH:mm format (24-hour) if specified"
+            description: "Exact time in HH:mm format (24-hour) if specified - use for once_daily"
+          },
+          doses: {
+            type: ["array", "null"],
+            description: "For twice_daily or three_times_daily: array of dose times",
+            items: {
+              type: "object",
+              properties: {
+                doseNumber: { type: "integer", minimum: 1, description: "1, 2, or 3" },
+                timeOfDay: { type: ["string", "null"], enum: ["morning", "afternoon", "evening", "bedtime", null] },
+                exactTime: { type: ["string", "null"], pattern: "^([01]\\d|2[0-3]):([0-5]\\d)$" }
+              },
+              required: ["doseNumber"]
+            }
           },
           instructions: { 
             type: ["string", "null"],
-            description: "Special instructions (e.g., 'take with food', 'rotate injection sites')"
+            description: "Special instructions (e.g., 'take with food', 'rotate injection sites', 'mix 2 vials in 1mL')"
           },
         },
         required: ["name", "startDayOffset", "durationDays"],

@@ -16,19 +16,40 @@ interface GenerateTasksInput {
   quietHours?: { start: string; end: string } | null;
 }
 
-function formatMedicationLabel(med: {
-  name: string;
-  dosageAmount: number | null;
-  dosageUnit: string | null;
-  dosage: string | null;
-}): string {
+interface Dose {
+  doseNumber: number;
+  timeOfDay: string | null;
+  exactTime: string | null;
+}
+
+function formatMedicationLabel(
+  med: {
+    name: string;
+    dosageAmount: number | null;
+    dosageUnit: string | null;
+    unitStrength?: string | null;
+    dosage: string | null;
+  },
+  doseNumber?: number,
+  totalDoses?: number
+): string {
+  let label = med.name;
+  
   if (med.dosageAmount && med.dosageUnit) {
-    return `${med.name} ${med.dosageAmount} ${med.dosageUnit}`;
+    if (med.unitStrength) {
+      label = `${med.name} ${med.dosageAmount} ${med.dosageUnit} (${med.unitStrength} each)`;
+    } else {
+      label = `${med.name} ${med.dosageAmount} ${med.dosageUnit}`;
+    }
+  } else if (med.dosage) {
+    label = `${med.name} ${med.dosage}`;
   }
-  if (med.dosage) {
-    return `${med.name} ${med.dosage}`;
+  
+  if (doseNumber && totalDoses && totalDoses > 1) {
+    label = `${label} (Dose ${doseNumber}/${totalDoses})`;
   }
-  return med.name;
+  
+  return label;
 }
 
 export async function generatePlanTasks(input: GenerateTasksInput) {
@@ -99,32 +120,74 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
       const medEndDay = med.startDayOffset + med.durationDays - 1;
 
       if (cycleDayIndex >= medStartDay && cycleDayIndex <= medEndDay) {
-        let dueAt = createDueAtTime(
-          date,
-          med.timeOfDay,
-          med.exactTime,
-          userTimezone
-        );
+        // Check if medication has multiple doses
+        const doses = (med.doses as Dose[] | null) || null;
+        const medWithStrength = med as typeof med & { unitStrength?: string | null };
+        
+        if (doses && doses.length > 0) {
+          // Create a task for each dose
+          for (const dose of doses) {
+            let dueAt = createDueAtTime(
+              date,
+              dose.timeOfDay,
+              dose.exactTime,
+              userTimezone
+            );
 
-        dueAt = pushOutOfQuietHours(dueAt, quietHours || null, userTimezone);
+            dueAt = pushOutOfQuietHours(dueAt, quietHours || null, userTimezone);
 
-        if (dueAt > new Date()) {
-          tasks.push({
-            planDayDate: fromZonedTime(date, userTimezone),
-            kind: "REMINDER",
-            label: formatMedicationLabel(med),
-            dueAt,
-            meta: {
-              medicationId: med.id,
-              medicationName: med.name,
-              dosageAmount: med.dosageAmount,
-              dosageUnit: med.dosageUnit,
-              dosage: med.dosage,
-              frequency: med.frequency,
-              route: med.route,
-              instructions: med.instructions,
-            },
-          });
+            if (dueAt > new Date()) {
+              tasks.push({
+                planDayDate: fromZonedTime(date, userTimezone),
+                kind: "REMINDER",
+                label: formatMedicationLabel(medWithStrength, dose.doseNumber, doses.length),
+                dueAt,
+                meta: {
+                  medicationId: med.id,
+                  medicationName: med.name,
+                  dosageAmount: med.dosageAmount,
+                  dosageUnit: med.dosageUnit,
+                  unitStrength: medWithStrength.unitStrength,
+                  dosage: med.dosage,
+                  frequency: med.frequency,
+                  route: med.route,
+                  instructions: med.instructions,
+                  doseNumber: dose.doseNumber,
+                  totalDoses: doses.length,
+                },
+              });
+            }
+          }
+        } else {
+          // Single dose (once_daily or no doses array)
+          let dueAt = createDueAtTime(
+            date,
+            med.timeOfDay,
+            med.exactTime,
+            userTimezone
+          );
+
+          dueAt = pushOutOfQuietHours(dueAt, quietHours || null, userTimezone);
+
+          if (dueAt > new Date()) {
+            tasks.push({
+              planDayDate: fromZonedTime(date, userTimezone),
+              kind: "REMINDER",
+              label: formatMedicationLabel(medWithStrength),
+              dueAt,
+              meta: {
+                medicationId: med.id,
+                medicationName: med.name,
+                dosageAmount: med.dosageAmount,
+                dosageUnit: med.dosageUnit,
+                unitStrength: medWithStrength.unitStrength,
+                dosage: med.dosage,
+                frequency: med.frequency,
+                route: med.route,
+                instructions: med.instructions,
+              },
+            });
+          }
         }
       }
     }

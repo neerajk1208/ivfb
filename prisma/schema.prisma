@@ -95,6 +95,7 @@ model Medication {
   name           String
   dosageAmount   Float?
   dosageUnit     String?
+  unitStrength   String?
   dosage         String?
   frequency      String  @default("once_daily")
   route          String?
@@ -102,6 +103,7 @@ model Medication {
   durationDays   Int
   timeOfDay      String?
   exactTime      String?
+  doses          Json?
   instructions   String?
 
   protocolPlan ProtocolPlan @relation(fields: [protocolPlanId], references: [id], onDelete: Cascade)

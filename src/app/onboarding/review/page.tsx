@@ -20,11 +20,18 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, Pill, Calendar, AlertCircle, CalendarPlus } from "lucide-react";
 import { Paywall } from "@/components/Paywall";
 
+interface Dose {
+  doseNumber: number;
+  timeOfDay: string | null;
+  exactTime: string | null;
+}
+
 interface Medication {
   id: string;
   name: string;
   dosageAmount: number | null;
   dosageUnit: string | null;
+  unitStrength: string | null;
   dosage: string | null;
   frequency: string;
   route: string | null;
@@ -32,6 +39,7 @@ interface Medication {
   durationDays: number;
   timeOfDay: string | null;
   exactTime: string | null;
+  doses: Dose[] | null;
   instructions: string | null;
 }
 
@@ -113,6 +121,47 @@ function formatDateFromOffset(cycleStartDate: string, offsetDays: number): strin
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function getDateFromOffset(cycleStartDate: string, offsetDays: number): string {
+  if (!cycleStartDate) return "";
+  const date = new Date(cycleStartDate);
+  date.setDate(date.getDate() + offsetDays);
+  return date.toISOString().split("T")[0];
+}
+
+function getOffsetFromDate(cycleStartDate: string, targetDate: string): number {
+  if (!cycleStartDate || !targetDate) return 0;
+  const start = new Date(cycleStartDate);
+  const target = new Date(targetDate);
+  const diffTime = target.getTime() - start.getTime();
+  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+}
+
+function getDosesForFrequency(frequency: string): number {
+  switch (frequency) {
+    case "twice_daily": return 2;
+    case "three_times_daily": return 3;
+    default: return 1;
+  }
+}
+
+function getDefaultDoses(frequency: string): Dose[] | null {
+  const count = getDosesForFrequency(frequency);
+  if (count === 1) return null;
+  
+  const defaults: Record<number, Dose[]> = {
+    2: [
+      { doseNumber: 1, timeOfDay: "morning", exactTime: "08:00" },
+      { doseNumber: 2, timeOfDay: "evening", exactTime: "20:00" },
+    ],
+    3: [
+      { doseNumber: 1, timeOfDay: "morning", exactTime: "08:00" },
+      { doseNumber: 2, timeOfDay: "afternoon", exactTime: "14:00" },
+      { doseNumber: 3, timeOfDay: "evening", exactTime: "20:00" },
+    ],
+  };
+  return defaults[count] || null;
+}
+
 function ReviewPageContent() {
   const { status } = useSession();
   const router = useRouter();
@@ -176,6 +225,7 @@ function ReviewPageContent() {
             name: m.name,
             dosageAmount: m.dosageAmount,
             dosageUnit: m.dosageUnit,
+            unitStrength: m.unitStrength,
             dosage: m.dosage || (m.dosageAmount && m.dosageUnit ? `${m.dosageAmount} ${m.dosageUnit}` : null),
             frequency: m.frequency,
             route: m.route,
@@ -183,6 +233,7 @@ function ReviewPageContent() {
             durationDays: m.durationDays,
             timeOfDay: m.timeOfDay,
             exactTime: m.exactTime,
+            doses: m.doses,
             instructions: m.instructions,
           })),
           appointments: protocol.appointments.map((a) => ({
@@ -252,6 +303,7 @@ function ReviewPageContent() {
           name: m.name,
           dosageAmount: m.dosageAmount,
           dosageUnit: m.dosageUnit,
+          unitStrength: m.unitStrength,
           dosage: m.dosage,
           frequency: m.frequency || "once_daily",
           route: m.route,
@@ -259,6 +311,7 @@ function ReviewPageContent() {
           durationDays: m.durationDays,
           timeOfDay: m.timeOfDay,
           exactTime: m.exactTime,
+          doses: m.doses || null,
           instructions: m.instructions,
         })),
         appointments: (p.appointments || []).map((a: any) => ({
@@ -298,6 +351,7 @@ function ReviewPageContent() {
       name: "",
       dosageAmount: null,
       dosageUnit: "IU",
+      unitStrength: null,
       dosage: null,
       frequency: "once_daily",
       route: "subcutaneous",
@@ -305,6 +359,7 @@ function ReviewPageContent() {
       durationDays: 10,
       timeOfDay: "evening",
       exactTime: null,
+      doses: null,
       instructions: null,
     };
     setProtocol({
@@ -394,6 +449,7 @@ function ReviewPageContent() {
             name: m.name,
             dosageAmount: m.dosageAmount,
             dosageUnit: m.dosageUnit,
+            unitStrength: m.unitStrength,
             dosage: m.dosage || (m.dosageAmount && m.dosageUnit ? `${m.dosageAmount} ${m.dosageUnit}` : null),
             frequency: m.frequency,
             route: m.route,
@@ -401,6 +457,7 @@ function ReviewPageContent() {
             durationDays: m.durationDays,
             timeOfDay: m.timeOfDay,
             exactTime: m.exactTime,
+            doses: m.doses,
             instructions: m.instructions,
           })),
           appointments: protocol.appointments.map((a) => ({
@@ -760,6 +817,20 @@ function ReviewPageContent() {
                       </Select>
                     </div>
 
+                    {/* Unit Strength (for pills, etc.) */}
+                    {(med.dosageUnit === "pills" || med.dosageUnit === "patches") && (
+                      <div className="space-y-2">
+                        <Label className="text-xs">Per-unit strength</Label>
+                        <Input
+                          placeholder="e.g., 2mg"
+                          value={med.unitStrength || ""}
+                          onChange={(e) =>
+                            updateMedication(med.id, "unitStrength", e.target.value || null)
+                          }
+                        />
+                      </div>
+                    )}
+
                     {/* Route */}
                     <div className="space-y-2">
                       <Label className="text-xs">Route</Label>
@@ -787,9 +858,16 @@ function ReviewPageContent() {
                       <Label className="text-xs">Frequency</Label>
                       <Select
                         value={med.frequency}
-                        onValueChange={(v) =>
-                          updateMedication(med.id, "frequency", v)
-                        }
+                        onValueChange={(v) => {
+                          updateMedication(med.id, "frequency", v);
+                          // Initialize doses when switching to multi-dose frequency
+                          const doseCount = getDosesForFrequency(v);
+                          if (doseCount > 1) {
+                            updateMedication(med.id, "doses", getDefaultDoses(v));
+                          } else {
+                            updateMedication(med.id, "doses", null);
+                          }
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -804,89 +882,129 @@ function ReviewPageContent() {
                       </Select>
                     </div>
 
-                    {/* Start Day */}
+                    {/* Start Date */}
+                    <div className="space-y-2">
+                      <Label className="text-xs">Start Date</Label>
+                      <Input
+                        type="date"
+                        value={protocol.cycleStartDate ? getDateFromOffset(protocol.cycleStartDate, med.startDayOffset) : ""}
+                        onChange={(e) => {
+                          if (protocol.cycleStartDate && e.target.value) {
+                            updateMedication(
+                              med.id,
+                              "startDayOffset",
+                              getOffsetFromDate(protocol.cycleStartDate, e.target.value)
+                            );
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {/* End Date */}
                     <div className="space-y-2">
                       <Label className="text-xs">
-                        Start Date
-                        {protocol.cycleStartDate && (
-                          <span className="ml-1 text-primary font-medium">
-                            ({formatDateFromOffset(protocol.cycleStartDate, med.startDayOffset)})
-                          </span>
-                        )}
+                        End Date
+                        <span className="ml-1 text-muted-foreground">
+                          ({med.durationDays} {med.durationDays === 1 ? "day" : "days"})
+                        </span>
                       </Label>
                       <Input
-                        type="number"
-                        min={0}
-                        placeholder="Day offset"
-                        value={med.startDayOffset}
-                        onChange={(e) =>
-                          updateMedication(
-                            med.id,
-                            "startDayOffset",
-                            parseInt(e.target.value) || 0
-                          )
-                        }
+                        type="date"
+                        value={protocol.cycleStartDate ? getDateFromOffset(protocol.cycleStartDate, med.startDayOffset + med.durationDays - 1) : ""}
+                        onChange={(e) => {
+                          if (protocol.cycleStartDate && e.target.value) {
+                            const startDate = getDateFromOffset(protocol.cycleStartDate, med.startDayOffset);
+                            const newDuration = getOffsetFromDate(startDate, e.target.value) + 1;
+                            updateMedication(
+                              med.id,
+                              "durationDays",
+                              Math.max(1, newDuration)
+                            );
+                          }
+                        }}
                       />
                     </div>
 
-                    {/* Duration */}
-                    <div className="space-y-2">
-                      <Label className="text-xs">
-                        Duration
-                        {protocol.cycleStartDate && med.durationDays > 0 && (
-                          <span className="ml-1 text-muted-foreground">
-                            (ends {formatDateFromOffset(protocol.cycleStartDate, med.startDayOffset + med.durationDays - 1)})
-                          </span>
-                        )}
-                      </Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        placeholder="Days"
-                        value={med.durationDays}
-                        onChange={(e) =>
-                          updateMedication(
-                            med.id,
-                            "durationDays",
-                            parseInt(e.target.value) || 1
-                          )
-                        }
-                      />
-                    </div>
+                    {/* Time fields - single dose */}
+                    {getDosesForFrequency(med.frequency) === 1 && (
+                      <>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Time of Day</Label>
+                          <Select
+                            value={med.timeOfDay || "evening"}
+                            onValueChange={(v) =>
+                              updateMedication(med.id, "timeOfDay", v)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {TIME_OPTIONS.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Exact Time</Label>
+                          <Input
+                            type="time"
+                            value={med.exactTime || ""}
+                            onChange={(e) =>
+                              updateMedication(med.id, "exactTime", e.target.value || null)
+                            }
+                          />
+                        </div>
+                      </>
+                    )}
 
-                    {/* Time of Day */}
-                    <div className="space-y-2">
-                      <Label className="text-xs">Time of Day</Label>
-                      <Select
-                        value={med.timeOfDay || "evening"}
-                        onValueChange={(v) =>
-                          updateMedication(med.id, "timeOfDay", v)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TIME_OPTIONS.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Exact Time */}
-                    <div className="space-y-2">
-                      <Label className="text-xs">Exact Time (if specific)</Label>
-                      <Input
-                        type="time"
-                        value={med.exactTime || ""}
-                        onChange={(e) =>
-                          updateMedication(med.id, "exactTime", e.target.value || null)
-                        }
-                      />
-                    </div>
+                    {/* Time fields - multiple doses */}
+                    {getDosesForFrequency(med.frequency) > 1 && (
+                      <div className="col-span-2 space-y-3">
+                        <Label className="text-xs">Dose Times</Label>
+                        {(med.doses || getDefaultDoses(med.frequency) || []).map((dose, idx) => (
+                          <div key={dose.doseNumber} className="flex items-center gap-2 pl-2 border-l-2 border-primary/30">
+                            <span className="text-xs text-muted-foreground w-16">Dose {dose.doseNumber}</span>
+                            <Select
+                              value={dose.timeOfDay || "morning"}
+                              onValueChange={(v) => {
+                                const currentDoses = med.doses || getDefaultDoses(med.frequency) || [];
+                                const updated = currentDoses.map((d, i) =>
+                                  i === idx ? { ...d, timeOfDay: v } : d
+                                );
+                                updateMedication(med.id, "doses", updated);
+                              }}
+                            >
+                              <SelectTrigger className="w-32">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {TIME_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="time"
+                              className="w-28"
+                              value={dose.exactTime || ""}
+                              onChange={(e) => {
+                                const currentDoses = med.doses || getDefaultDoses(med.frequency) || [];
+                                const updated = currentDoses.map((d, i) =>
+                                  i === idx ? { ...d, exactTime: e.target.value || null } : d
+                                );
+                                updateMedication(med.id, "doses", updated);
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Instructions */}
                     <div className="col-span-2 space-y-2">

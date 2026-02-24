@@ -90,6 +90,8 @@ For EACH medication, look for and include in the "instructions" field:
 3. **Dosages**:
    - Extract numeric amount separately (e.g., 225)
    - Extract unit separately (e.g., IU, mg, mL)
+   - For pills: dosageAmount = number of pills, dosageUnit = "pills", unitStrength = strength per pill (e.g., "2mg")
+   - Example: "Take 2 pills of Estrace 2mg" → dosageAmount=2, dosageUnit="pills", unitStrength="2mg"
    - If unclear, put full string in "dosage" field
 
 4. **Times**:
@@ -97,6 +99,10 @@ For EACH medication, look for and include in the "instructions" field:
    - Evening meds usually taken 7-10 PM
    - TRIGGER SHOTS have exact times (e.g., "10:00 PM") - this is CRITICAL
    - Use 24-hour format: "22:00" not "10:00 PM"
+   - For ONCE DAILY: use timeOfDay and exactTime fields
+   - For TWICE DAILY or THREE TIMES DAILY: use the "doses" array:
+     * doses: [{ doseNumber: 1, timeOfDay: "morning", exactTime: "08:00" }, { doseNumber: 2, timeOfDay: "evening", exactTime: "20:00" }]
+     * Each dose should have its own time
 
 5. **Routes**:
    - Most IVF injectables are subcutaneous
@@ -306,6 +312,8 @@ function parseAndValidate(content: string): ProtocolPlanExtraction {
     medications: validated.data.medications.map(med => ({
       ...med,
       name: cleanMedicationName(med.name),
+      unitStrength: (med as any).unitStrength || null,
+      doses: (med as any).doses || null,
     })),
   };
 
@@ -347,6 +355,7 @@ function normalizeMedication(med: any): any {
     name: cleanMedicationName(med.name),
     dosageAmount: typeof med.dosageAmount === "number" ? med.dosageAmount : null,
     dosageUnit: med.dosageUnit || null,
+    unitStrength: med.unitStrength || null,
     dosage: med.dosage || null,
     frequency: med.frequency || "once_daily",
     route: med.route || null,
@@ -354,6 +363,7 @@ function normalizeMedication(med: any): any {
     durationDays: typeof med.durationDays === "number" && med.durationDays > 0 ? med.durationDays : 1,
     timeOfDay: med.timeOfDay || null,
     exactTime: med.exactTime || med.customTime || null,
+    doses: Array.isArray(med.doses) ? med.doses : null,
     instructions: med.instructions || null,
   };
 }

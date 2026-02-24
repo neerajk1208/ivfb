@@ -48,6 +48,7 @@ export async function saveProtocolPlanDraft(input: SaveProtocolDraftInput) {
           name: med.name,
           dosageAmount: med.dosageAmount,
           dosageUnit: med.dosageUnit,
+          unitStrength: (med as any).unitStrength || null,
           dosage: med.dosage,
           frequency: med.frequency || "once_daily",
           route: med.route,
@@ -55,6 +56,7 @@ export async function saveProtocolPlanDraft(input: SaveProtocolDraftInput) {
           durationDays: med.durationDays,
           timeOfDay: med.timeOfDay,
           exactTime: med.exactTime,
+          doses: (med as any).doses ? ((med as any).doses as any) : undefined,
           instructions: med.instructions,
         })),
       },
@@ -100,10 +102,17 @@ export async function activateProtocolPlan(protocolPlanId: string) {
   });
 }
 
+export interface DoseInput {
+  doseNumber: number;
+  timeOfDay?: string | null;
+  exactTime?: string | null;
+}
+
 export interface MedicationInput {
   name: string;
   dosageAmount?: number | null;
   dosageUnit?: string | null;
+  unitStrength?: string | null;
   dosage?: string | null;
   frequency?: string | null;
   route?: string | null;
@@ -111,6 +120,7 @@ export interface MedicationInput {
   durationDays: number;
   timeOfDay?: string | null;
   exactTime?: string | null;
+  doses?: DoseInput[] | null;
   instructions?: string | null;
 }
 
@@ -169,6 +179,7 @@ export async function updateProtocolPlanFromReview(
           name: med.name,
           dosageAmount: med.dosageAmount || null,
           dosageUnit: med.dosageUnit || null,
+          unitStrength: med.unitStrength || null,
           dosage: med.dosage || null,
           frequency: med.frequency || "once_daily",
           route: med.route || null,
@@ -176,6 +187,7 @@ export async function updateProtocolPlanFromReview(
           durationDays: med.durationDays,
           timeOfDay: med.timeOfDay || null,
           exactTime: med.exactTime || null,
+          doses: med.doses ? (med.doses as any) : undefined,
           instructions: med.instructions || null,
         })),
       },
