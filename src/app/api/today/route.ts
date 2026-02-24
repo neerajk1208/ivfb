@@ -40,6 +40,7 @@ export async function GET() {
         label: t.label,
         dueAt: t.dueAt?.toISOString(),
         status: t.status,
+        meta: t.meta as Record<string, any> | undefined,
       })),
       upcomingTasks: upcomingTasks
         .filter((t) => {
@@ -54,6 +55,7 @@ export async function GET() {
           label: t.label,
           dueAt: t.dueAt?.toISOString(),
           status: t.status,
+          meta: t.meta as Record<string, any> | undefined,
         })),
       todayCheckIn: todayCheckIn
         ? {

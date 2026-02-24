@@ -100,8 +100,21 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
     kind: string;
     label: string;
     dueAt: Date;
+    timeWindow?: { start: string; end: string };
     meta?: any;
   }> = [];
+
+  const parseDbDate = (d: Date | string): Date => {
+    const str = typeof d === 'string' ? d : d.toISOString();
+    const [year, month, day] = str.split("T")[0].split("-").map(Number);
+    return new Date(year, month - 1, day);
+  };
+
+  const isSameDay = (d1: Date, d2: Date): boolean => {
+    return d1.getFullYear() === d2.getFullYear() &&
+           d1.getMonth() === d2.getMonth() &&
+           d1.getDate() === d2.getDate();
+  };
 
   for (let i = 0; i < appConfig.planDaysAhead; i++) {
     const date = addDays(today, i);
@@ -114,18 +127,16 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
       summary: null,
     });
 
-    // Generate medication tasks
+    // Generate medication tasks using actual dates
     for (const med of protocol.medications) {
-      const medStartDay = med.startDayOffset;
-      const medEndDay = med.startDayOffset + med.durationDays - 1;
+      const medStartDate = med.startDate ? parseDbDate(med.startDate) : addDays(cycleStartDate, med.startDayOffset);
+      const medEndDate = med.endDate ? parseDbDate(med.endDate) : addDays(medStartDate, med.durationDays - 1);
 
-      if (cycleDayIndex >= medStartDay && cycleDayIndex <= medEndDay) {
-        // Check if medication has multiple doses
+      if (date >= medStartDate && date <= medEndDate) {
         const doses = (med.doses as Dose[] | null) || null;
         const medWithStrength = med as typeof med & { unitStrength?: string | null };
         
         if (doses && doses.length > 0) {
-          // Create a task for each dose
           for (const dose of doses) {
             let dueAt = createDueAtTime(
               date,
@@ -159,7 +170,6 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
             }
           }
         } else {
-          // Single dose (once_daily or no doses array)
           let dueAt = createDueAtTime(
             date,
             med.timeOfDay,
@@ -192,15 +202,17 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
       }
     }
 
-    // Generate appointment tasks
+    // Generate appointment tasks using actual dates (all-day, no specific time)
     for (const apt of protocol.appointments) {
-      if (cycleDayIndex === apt.dayOffset) {
-        const aptTime = createDueAtTime(
-          date,
-          apt.critical ? null : "morning",
-          apt.exactTime,
-          userTimezone
-        );
+      const aptDate = apt.date ? parseDbDate(apt.date) : addDays(cycleStartDate, apt.dayOffset);
+      
+      if (isSameDay(date, aptDate)) {
+        // For appointments: use exactTime if provided, otherwise set to start of day for sorting
+        // but mark as all-day event
+        const hasTime = !!apt.exactTime;
+        const aptTime = hasTime 
+          ? createDueAtTime(date, null, apt.exactTime, userTimezone)
+          : createDueAtTime(date, "morning", null, userTimezone);
 
         if (aptTime > new Date()) {
           const aptLabel = getAppointmentLabel(apt.type);
@@ -215,6 +227,8 @@ export async function generatePlanTasks(input: GenerateTasksInput) {
               notes: apt.notes,
               fasting: apt.fasting,
               critical: apt.critical,
+              exactTime: apt.exactTime,
+              isAllDay: !hasTime,
             },
           });
         }

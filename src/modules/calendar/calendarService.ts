@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { DEFAULT_TIMES } from "@/lib/time";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
@@ -185,11 +186,11 @@ export async function syncToCalendar(
   const result = { synced: 0, failed: 0 };
   const timezone = user?.timezone || "America/Los_Angeles";
 
-  const timeOfDayToHour: Record<string, [number, number]> = {
-    morning: [8, 0],
-    afternoon: [13, 0],
-    evening: [18, 0],
-    bedtime: [21, 0],
+  const getTimeForTimeOfDay = (timeOfDay: string): { hour: number; minute: number } => {
+    if (timeOfDay in DEFAULT_TIMES) {
+      return DEFAULT_TIMES[timeOfDay as keyof typeof DEFAULT_TIMES];
+    }
+    return { hour: 9, minute: 0 };
   };
 
   const parseDate = (dateStr: string | Date): [number, number, number] => {
@@ -230,11 +231,9 @@ export async function syncToCalendar(
               startHour = h;
               startMinute = m;
             } else if (dose.timeOfDay) {
-              const t = timeOfDayToHour[dose.timeOfDay];
-              if (t) {
-                startHour = t[0];
-                startMinute = t[1];
-              }
+              const time = getTimeForTimeOfDay(dose.timeOfDay);
+              startHour = time.hour;
+              startMinute = time.minute;
             }
 
             const startDateTime = new Date(medDate);
@@ -257,11 +256,9 @@ export async function syncToCalendar(
             startHour = h;
             startMinute = m;
           } else if (med.timeOfDay) {
-            const t = timeOfDayToHour[med.timeOfDay];
-            if (t) {
-              startHour = t[0];
-              startMinute = t[1];
-            }
+            const time = getTimeForTimeOfDay(med.timeOfDay);
+            startHour = time.hour;
+            startMinute = time.minute;
           }
 
           const startDateTime = new Date(medDate);

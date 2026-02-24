@@ -17,6 +17,11 @@ interface Task {
   label: string;
   dueAt: string;
   status: string;
+  meta?: {
+    isAllDay?: boolean;
+    exactTime?: string;
+    [key: string]: any;
+  };
 }
 
 interface TodayData {
@@ -261,13 +266,16 @@ function TodayPageContent() {
                     >
                       {task.label}
                     </p>
-                    {task.dueAt && (
+                    {task.dueAt && !task.meta?.isAllDay && (
                       <p className="text-xs text-muted-foreground">
                         {new Date(task.dueAt).toLocaleTimeString([], {
                           hour: "numeric",
                           minute: "2-digit",
                         })}
                       </p>
+                    )}
+                    {task.meta?.isAllDay && (
+                      <p className="text-xs text-muted-foreground">All day</p>
                     )}
                   </div>
                   <Badge variant="secondary" className="text-xs">
@@ -379,7 +387,8 @@ function TodayPageContent() {
                       {formatDistanceToNow(new Date(task.dueAt), { addSuffix: true })}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(task.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {new Date(task.dueAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                      {new Date(task.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      {task.meta?.isAllDay ? " · All day" : ` · ${new Date(task.dueAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
                     </p>
                   </div>
                 </div>
