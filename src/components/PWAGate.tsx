@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,6 +30,17 @@ export function PWAGate({ children }: { children: React.ReactNode }) {
   const [platform, setPlatform] = useState<Platform>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [checking, setChecking] = useState(true);
+  const lastLoggedState = useRef<string>("");
+
+  useEffect(() => {
+    const isPWA = typeof window !== "undefined" && isRunningAsPWA();
+    const stateKey = `status=${status},checking=${checking},showGate=${showGate},isPWA=${isPWA}`;
+    
+    if (lastLoggedState.current !== stateKey) {
+      console.log("[PWAGate]", stateKey);
+      lastLoggedState.current = stateKey;
+    }
+  }, [status, checking, showGate]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -72,7 +83,16 @@ export function PWAGate({ children }: { children: React.ReactNode }) {
   };
 
   if (checking || status === "loading") {
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-pulse text-muted-foreground">Loading...</div>
+          <div className="text-xs text-muted-foreground/50 mt-2">
+            [session: {status}, checking: {String(checking)}]
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!showGate) {
