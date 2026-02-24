@@ -80,11 +80,13 @@ For EACH medication, look for and include in the "instructions" field:
    - DO NOT calculate day offsets - just read the dates you see
    - If calendar shows "Feb 15" as a column header and medication has a mark there, startDate = "2025-02-15"
 
-2. **Reading Calendar Grids**:
+2. **Reading Calendar Grids - CELL BOUNDARIES ARE CRITICAL**:
    - Dates are shown as COLUMN HEADERS (e.g., "Feb 15", "Feb 16", "2/15", "2/16")
    - Medications are usually listed in ROWS on the left
    - A checkmark (✓, X, or filled box) in a cell means that medication is taken on that column's date
-   - Match each cell to its column's date header
+   - **IMPORTANT: Text belongs to the CELL/BOX it is physically inside, NOT the column it appears closest to visually**
+   - If text is near a cell border but still INSIDE a cell, use THAT cell's date - follow the grid lines/borders strictly
+   - Match each cell to its column's date header by checking which column's vertical borders contain the text
    - BW, U/S, appointments are usually at the TOP or BOTTOM of the grid
 
 3. **Dosages**:
@@ -127,6 +129,7 @@ ${JSON.stringify(protocolPlanExtractionJsonSchema, null, 2)}
 - READ ACTUAL DATES from column headers - do NOT calculate offsets
 - For each medication: startDate = first column with mark, endDate = last column with mark
 - For each appointment: date = the column where it's marked
+- **CELL BOUNDARIES: If text appears near a border but is INSIDE a cell, use that cell's date - do NOT assign to adjacent column**
 - Extract EXACT trigger time if shown - this is critical for IVF success
 - BW/U/S are appointments, not medications
 - APPOINTMENT TYPES: Read carefully - BW=BLOODWORK, U/S=ULTRASOUND, both=MONITORING, VOR/ER=RETRIEVAL, ET=TRANSFER
