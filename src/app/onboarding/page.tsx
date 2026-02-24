@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, FileText, Image, AlertCircle } from "lucide-react";
+import { Upload, FileText, Image, AlertCircle, Check, Heart, ClipboardList } from "lucide-react";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -53,9 +53,17 @@ export default function OnboardingPage() {
   
   // Upload state
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState("");
+  const [showProgressScreen, setShowProgressScreen] = useState(false);
+  const [currentProgressStep, setCurrentProgressStep] = useState(0);
+  const [progressError, setProgressError] = useState("");
+
+  const PROGRESS_STEPS = [
+    { id: 1, label: "Uploading your protocol", duration: 0 },
+    { id: 2, label: "Reading your document", duration: 1500 },
+    { id: 3, label: "Finding your medications", duration: 2000 },
+    { id: 4, label: "Identifying appointments", duration: 2000 },
+    { id: 5, label: "Setting up your plan", duration: 1500 },
+  ];
 
   useEffect(() => {
     // Auto-detect timezone from browser
@@ -100,6 +108,16 @@ export default function OnboardingPage() {
     return null;
   };
 
+  const advanceProgressSteps = async (startStep: number, endStep: number) => {
+    for (let i = startStep; i <= endStep; i++) {
+      setCurrentProgressStep(i);
+      const stepDuration = PROGRESS_STEPS[i - 1]?.duration || 1000;
+      if (i < endStep) {
+        await new Promise(resolve => setTimeout(resolve, stepDuration));
+      }
+    }
+  };
+
   const processFile = async (file: File) => {
     const validationError = validateFile(file);
     if (validationError) {
@@ -108,8 +126,9 @@ export default function OnboardingPage() {
     }
 
     setError("");
-    setIsUploading(true);
-    setUploadProgress("Uploading...");
+    setProgressError("");
+    setShowProgressScreen(true);
+    setCurrentProgressStep(1);
 
     try {
       const kind = ACCEPTED_TYPES[file.type];
@@ -144,15 +163,20 @@ export default function OnboardingPage() {
         throw new Error(uploadData.error || "Failed to upload file");
       }
 
-      setIsUploading(false);
-      setIsProcessing(true);
-      setUploadProgress("Analyzing your protocol...");
-
-      const finalizeRes = await fetch("/api/uploads/finalize", {
+      // Upload complete, start advancing through analysis steps
+      setCurrentProgressStep(2);
+      
+      // Start the finalize request and advance steps in parallel
+      const finalizePromise = fetch("/api/uploads/finalize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uploadId }),
       });
+
+      // Advance through steps 2-4 while waiting for API
+      await advanceProgressSteps(2, 4);
+
+      const finalizeRes = await finalizePromise;
 
       const contentType = finalizeRes.headers.get("content-type");
       if (!contentType?.includes("application/json")) {
@@ -164,12 +188,13 @@ export default function OnboardingPage() {
         throw new Error(finalizeData.error || "Failed to process file");
       }
 
+      // Final step
+      setCurrentProgressStep(5);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       router.push("/onboarding/review");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-      setIsUploading(false);
-      setIsProcessing(false);
-      setUploadProgress("");
+      setProgressError(err instanceof Error ? err.message : "Something went wrong");
     }
   };
 
@@ -203,6 +228,146 @@ export default function OnboardingPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  // Progress screen - shown after file is selected
+  if (showProgressScreen) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 bg-gradient-to-b from-background to-primary/5">
+        <div className="max-w-md w-full space-y-8">
+          {/* Animated icon */}
+          <div className="flex justify-center">
+            <div className="relative">
+              {/* Pulsing heart background */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Heart 
+                  className="w-20 h-20 text-primary/20 animate-pulse" 
+                  style={{ animationDuration: '2s' }}
+                />
+              </div>
+              {/* Clipboard icon */}
+              <div className="relative w-24 h-24 bg-primary/10 rounded-2xl flex items-center justify-center">
+                <ClipboardList className="w-12 h-12 text-primary" />
+                {/* Animated checkmark overlay */}
+                {currentProgressStep >= 5 && (
+                  <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center animate-in zoom-in duration-300">
+                    <Check className="w-5 h-5 text-white" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Title */}
+          <div className="text-center space-y-2">
+            <h1 className="text-2xl font-semibold">
+              {currentProgressStep >= 5 ? "All done!" : "Analyzing Your Protocol"}
+            </h1>
+            <p className="text-muted-foreground">
+              {currentProgressStep >= 5 
+                ? "Your personalized plan is ready" 
+                : "This will only take a moment..."}
+            </p>
+          </div>
+
+          {/* Progress steps */}
+          <Card className="border-0 shadow-lg bg-card/80 backdrop-blur">
+            <CardContent className="pt-6 pb-4">
+              <div className="space-y-4">
+                {PROGRESS_STEPS.map((progressStep, index) => {
+                  const isComplete = currentProgressStep > progressStep.id;
+                  const isCurrent = currentProgressStep === progressStep.id;
+                  const isPending = currentProgressStep < progressStep.id;
+
+                  return (
+                    <div 
+                      key={progressStep.id}
+                      className={`flex items-center gap-4 transition-all duration-500 ${
+                        isPending ? 'opacity-40' : 'opacity-100'
+                      }`}
+                    >
+                      {/* Step indicator */}
+                      <div className={`
+                        w-8 h-8 rounded-full flex items-center justify-center shrink-0
+                        transition-all duration-500
+                        ${isComplete 
+                          ? 'bg-green-500 text-white' 
+                          : isCurrent 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-muted text-muted-foreground'
+                        }
+                      `}>
+                        {isComplete ? (
+                          <Check className="w-4 h-4" />
+                        ) : isCurrent ? (
+                          <div className="w-3 h-3 bg-primary-foreground rounded-full animate-pulse" />
+                        ) : (
+                          <span className="text-xs font-medium">{progressStep.id}</span>
+                        )}
+                      </div>
+
+                      {/* Step label */}
+                      <span className={`text-sm transition-all duration-300 ${
+                        isComplete 
+                          ? 'text-green-600 font-medium' 
+                          : isCurrent 
+                            ? 'text-foreground font-medium' 
+                            : 'text-muted-foreground'
+                      }`}>
+                        {progressStep.label}
+                        {isCurrent && (
+                          <span className="inline-block ml-1 animate-pulse">...</span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Error state */}
+          {progressError && (
+            <Card className="border-destructive/50 bg-destructive/5">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                  <div className="space-y-2">
+                    <p className="text-sm text-destructive">{progressError}</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setShowProgressScreen(false);
+                        setProgressError("");
+                        setCurrentProgressStep(0);
+                      }}
+                    >
+                      Try again
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Supportive message */}
+          {!progressError && (
+            <p className="text-xs text-center text-muted-foreground px-4">
+              We&apos;re extracting your medications and appointments to create your personalized care plan.
+            </p>
+          )}
+        </div>
+
+        {/* Decorative elements */}
+        <style jsx>{`
+          @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+          }
+        `}</style>
       </div>
     );
   }
@@ -309,69 +474,55 @@ export default function OnboardingPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {isUploading || isProcessing ? (
-                <div className="py-12 text-center space-y-4">
-                  <div className="w-12 h-12 mx-auto border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  <div className="space-y-1">
-                    <p className="font-medium">{uploadProgress}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {isProcessing 
-                        ? "This may take a moment..." 
-                        : "Please wait..."}
-                    </p>
+              <div
+                className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer hover:border-primary/50 hover:bg-primary/5 ${
+                  isDragging
+                    ? "border-primary bg-primary/10"
+                    : "border-muted-foreground/25"
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => document.getElementById("file-input")?.click()}
+              >
+                <input
+                  id="file-input"
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
+                  onChange={handleFileSelect}
+                />
+                
+                <div className="space-y-4">
+                  <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center">
+                    <Upload className="w-8 h-8 text-primary" />
                   </div>
-                </div>
-              ) : (
-                <div
-                  className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer hover:border-primary/50 hover:bg-primary/5 ${
-                    isDragging
-                      ? "border-primary bg-primary/10"
-                      : "border-muted-foreground/25"
-                  }`}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  onClick={() => document.getElementById("file-input")?.click()}
-                >
-                  <input
-                    id="file-input"
-                    type="file"
-                    className="hidden"
-                    accept=".pdf,image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
-                    onChange={handleFileSelect}
-                  />
                   
-                  <div className="space-y-4">
-                    <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center">
-                      <Upload className="w-8 h-8 text-primary" />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <p className="font-medium">
-                        {isDragging ? "Drop your file here" : "Drop your protocol here"}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        or <span className="text-primary font-medium">browse files</span>
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <FileText className="w-3.5 h-3.5" />
-                        PDF
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Image className="w-3.5 h-3.5" />
-                        JPG, PNG, WEBP, HEIC
-                      </span>
-                    </div>
-                    
-                    <p className="text-xs text-muted-foreground">
-                      Maximum file size: 10MB
+                  <div className="space-y-2">
+                    <p className="font-medium">
+                      {isDragging ? "Drop your file here" : "Drop your protocol here"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      or <span className="text-primary font-medium">browse files</span>
                     </p>
                   </div>
+
+                  <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <FileText className="w-3.5 h-3.5" />
+                      PDF
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Image className="w-3.5 h-3.5" />
+                      JPG, PNG, WEBP, HEIC
+                    </span>
+                  </div>
+                  
+                  <p className="text-xs text-muted-foreground">
+                    Maximum file size: 10MB
+                  </p>
                 </div>
-              )}
+              </div>
 
               {error && (
                 <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 text-destructive">
@@ -380,15 +531,13 @@ export default function OnboardingPage() {
                 </div>
               )}
 
-              {!isUploading && !isProcessing && (
-                <Button
-                  variant="ghost"
-                  className="w-full text-muted-foreground"
-                  onClick={() => setStep(1)}
-                >
-                  Back
-                </Button>
-              )}
+              <Button
+                variant="ghost"
+                className="w-full text-muted-foreground"
+                onClick={() => setStep(1)}
+              >
+                Back
+              </Button>
             </CardContent>
           </Card>
         )}
