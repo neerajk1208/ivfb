@@ -106,6 +106,13 @@ function generateId(): string {
   return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
+function formatDateFromOffset(cycleStartDate: string, offsetDays: number): string {
+  if (!cycleStartDate) return "";
+  const date = new Date(cycleStartDate);
+  date.setDate(date.getDate() + offsetDays);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function ReviewPageContent() {
   const { status } = useSession();
   const router = useRouter();
@@ -799,10 +806,18 @@ function ReviewPageContent() {
 
                     {/* Start Day */}
                     <div className="space-y-2">
-                      <Label className="text-xs">Start Day</Label>
+                      <Label className="text-xs">
+                        Start Date
+                        {protocol.cycleStartDate && (
+                          <span className="ml-1 text-primary font-medium">
+                            ({formatDateFromOffset(protocol.cycleStartDate, med.startDayOffset)})
+                          </span>
+                        )}
+                      </Label>
                       <Input
                         type="number"
                         min={0}
+                        placeholder="Day offset"
                         value={med.startDayOffset}
                         onChange={(e) =>
                           updateMedication(
@@ -816,10 +831,18 @@ function ReviewPageContent() {
 
                     {/* Duration */}
                     <div className="space-y-2">
-                      <Label className="text-xs">Duration (days)</Label>
+                      <Label className="text-xs">
+                        Duration
+                        {protocol.cycleStartDate && med.durationDays > 0 && (
+                          <span className="ml-1 text-muted-foreground">
+                            (ends {formatDateFromOffset(protocol.cycleStartDate, med.startDayOffset + med.durationDays - 1)})
+                          </span>
+                        )}
+                      </Label>
                       <Input
                         type="number"
                         min={1}
+                        placeholder="Days"
                         value={med.durationDays}
                         onChange={(e) =>
                           updateMedication(
@@ -961,10 +984,18 @@ function ReviewPageContent() {
 
                     {/* Day */}
                     <div className="space-y-2">
-                      <Label className="text-xs">Day</Label>
+                      <Label className="text-xs">
+                        Date
+                        {protocol.cycleStartDate && (
+                          <span className="ml-1 text-primary font-medium">
+                            ({formatDateFromOffset(protocol.cycleStartDate, apt.dayOffset)})
+                          </span>
+                        )}
+                      </Label>
                       <Input
                         type="number"
                         min={0}
+                        placeholder="Day offset"
                         value={apt.dayOffset}
                         onChange={(e) =>
                           updateAppointment(

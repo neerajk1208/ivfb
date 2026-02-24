@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDistanceToNow } from "date-fns";
 import { MessageCircle, Settings } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 
 interface Task {
   id: string;
@@ -205,7 +205,8 @@ function TodayPageContent() {
           <div>
             <h1 className="text-2xl font-semibold">Today</h1>
             <p className="text-muted-foreground">
-              Cycle Day {data.cycleDayIndex}
+              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+              {data.cycleDayIndex > 0 && ` · Day ${data.cycleDayIndex}`}
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -370,14 +371,17 @@ function TodayPageContent() {
                   key={task.id}
                   className="flex items-center justify-between py-2"
                 >
-                  <div className="flex items-center space-x-2">
+                  <div className="flex-1 min-w-0">
                     <span className="text-sm">{task.label}</span>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(task.dueAt), {
-                      addSuffix: true,
-                    })}
-                  </span>
+                  <div className="text-right ml-2">
+                    <p className="text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(task.dueAt), { addSuffix: true })}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(task.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {new Date(task.dueAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                    </p>
+                  </div>
                 </div>
               ))}
             </CardContent>

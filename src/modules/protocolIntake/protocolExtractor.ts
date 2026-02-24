@@ -61,6 +61,16 @@ const EXTRACTION_PROMPT = `You are an expert IVF nurse extracting medication pro
 - **ET** = Embryo Transfer (CRITICAL - exact time matters)
 - **β** or **Beta** = Pregnancy test
 
+## SPECIAL INSTRUCTIONS TO CAPTURE:
+For EACH medication, look for and include in the "instructions" field:
+- Mixing/preparation details (e.g., "mix 2 powder vials in 1mL liquid")
+- Number of vials/ampules to use together
+- Reconstitution instructions (e.g., "dissolve powder in saline")
+- Storage notes (e.g., "refrigerate after mixing")
+- Administration tips (e.g., "rotate injection sites", "inject slowly")
+- Any other notes about how to prepare or give the medication
+- Do NOT leave instructions empty if there are preparation details visible
+
 ## EXTRACTION RULES:
 
 1. **Dates & Cycle Start**: 
@@ -191,6 +201,8 @@ STEP 3 - EXTRACT MEDICATIONS:
 - For each medication row, find which columns have marks
 - startDayOffset = number of days from cycleStartDate to first mark
 - durationDays = count of consecutive days with marks
+- IMPORTANT: Look for preparation/mixing instructions near each medication
+  (e.g., "2 powder vials mixed in 1mL liquid") and put them in "instructions" field
 
 STEP 4 - EXTRACT APPOINTMENTS (TYPE MATTERS!):
 - "BW" alone = type: "BLOODWORK"

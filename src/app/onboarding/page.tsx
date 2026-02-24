@@ -33,10 +33,21 @@ export default function OnboardingPage() {
   const router = useRouter();
 
   const [step, setStep] = useState(1);
-  const [timezone, setTimezone] = useState("America/Los_Angeles");
+  const [timezone, setTimezone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [checkingCycle, setCheckingCycle] = useState(true);
+
+  useEffect(() => {
+    // Auto-detect timezone from browser
+    try {
+      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const isInList = COMMON_TIMEZONES.some(tz => tz.value === detected);
+      setTimezone(isInList ? detected : "America/Los_Angeles");
+    } catch {
+      setTimezone("America/Los_Angeles");
+    }
+  }, []);
 
   useEffect(() => {
     if (status === "unauthenticated") {
