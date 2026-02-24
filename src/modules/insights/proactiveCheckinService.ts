@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db";
 import { addHours, startOfDay, addDays } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
-import { DEFAULT_TIMES } from "@/lib/time";
 
 const BIG_EVENT_TYPES = ["TRIGGER", "RETRIEVAL", "TRANSFER"];
 
@@ -120,6 +119,17 @@ export async function createProactiveCheckInTasks(
       
       const checkInTime = addHours(eventDateInTz, config.delayHours);
       const planDayDate = startOfDay(checkInTime);
+
+      // Check for existing task to prevent duplicates on re-confirmation
+      const existingTask = await prisma.task.findFirst({
+        where: {
+          cycleId,
+          kind: "PROACTIVE_CHECKIN",
+          dueAt: checkInTime,
+        },
+      });
+
+      if (existingTask) continue;
 
       let planDay = await prisma.planDay.findFirst({
         where: { cycleId, date: planDayDate },

@@ -5,7 +5,7 @@ import { getFallbackReply } from "./fallbackRules";
 import { containsSevereKeyword, escalationResponse } from "@/config/buddy/severeKeywords";
 import { buddySystemPrompt, buddyContextTemplate } from "@/config/buddy/system";
 import { appConfig } from "@/config/app";
-import { getResourcesForContext, type Resource } from "@/config/buddy/resources";
+import { getResourcesForContext } from "@/config/buddy/resources";
 import { pickSuggestionsForUser, recordSuggestionShown } from "@/modules/insights/suggestionService";
 import { getMemoriesForUser, formatMemoriesForContext, processMessageForMemories } from "@/modules/insights/memoryService";
 import { getRecentMoodTrend, formatTrendForContext } from "@/modules/insights/trendsService";

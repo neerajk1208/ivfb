@@ -142,7 +142,8 @@ function formatBundledChatMessage(tasks: any[]): string {
   const reminders = tasks.filter((t) => t.kind === "REMINDER");
   const appointments = tasks.filter((t) => t.kind === "APPOINTMENT" || t.kind === "CRITICAL");
   const checkins = tasks.filter((t) => t.kind === "CHECKIN");
-  const other = tasks.filter((t) => !["REMINDER", "APPOINTMENT", "CRITICAL", "CHECKIN"].includes(t.kind));
+  const proactiveCheckins = tasks.filter((t) => t.kind === "PROACTIVE_CHECKIN");
+  const other = tasks.filter((t) => !["REMINDER", "APPOINTMENT", "CRITICAL", "CHECKIN", "PROACTIVE_CHECKIN"].includes(t.kind));
 
   const parts: string[] = [];
 
@@ -173,6 +174,10 @@ function formatBundledChatMessage(tasks: any[]): string {
     parts.push(`💛 Daily check-in time! How are you feeling today?\nReply with a number 1-5 (1=rough, 5=great).`);
   }
 
+  for (const proactive of proactiveCheckins) {
+    parts.push(`💛 ${proactive.label}\n\nHow are you feeling? Reply with your mood (1-5) or just share what's on your mind.`);
+  }
+
   for (const item of other) {
     parts.push(`📋 ${item.label}`);
   }
@@ -188,6 +193,7 @@ function formatBundledSms(tasks: any[]): string {
   const reminders = tasks.filter((t) => t.kind === "REMINDER");
   const appointments = tasks.filter((t) => t.kind === "APPOINTMENT" || t.kind === "CRITICAL");
   const checkins = tasks.filter((t) => t.kind === "CHECKIN");
+  const proactiveCheckins = tasks.filter((t) => t.kind === "PROACTIVE_CHECKIN");
 
   const parts: string[] = [];
 
@@ -211,6 +217,10 @@ function formatBundledSms(tasks: any[]): string {
     parts.push(`💛 Check-in: Reply 1-5`);
   }
 
+  if (proactiveCheckins.length > 0) {
+    parts.push(`💛 How are you feeling? Reply 1-5`);
+  }
+
   return parts.join(" | ");
 }
 
@@ -218,8 +228,9 @@ function formatBundledPush(tasks: any[]): { title: string; body: string; tag: st
   const reminders = tasks.filter((t) => t.kind === "REMINDER");
   const appointments = tasks.filter((t) => t.kind === "APPOINTMENT" || t.kind === "CRITICAL");
   const checkins = tasks.filter((t) => t.kind === "CHECKIN");
+  const proactiveCheckins = tasks.filter((t) => t.kind === "PROACTIVE_CHECKIN");
 
-  if (reminders.length > 0 && appointments.length === 0 && checkins.length === 0) {
+  if (reminders.length > 0 && appointments.length === 0 && checkins.length === 0 && proactiveCheckins.length === 0) {
     if (reminders.length === 1) {
       return {
         title: "💊 Medication Reminder",
@@ -234,7 +245,7 @@ function formatBundledPush(tasks: any[]): { title: string; body: string; tag: st
     };
   }
 
-  if (appointments.length > 0 && reminders.length === 0 && checkins.length === 0) {
+  if (appointments.length > 0 && reminders.length === 0 && checkins.length === 0 && proactiveCheckins.length === 0) {
     const meta = appointments[0].meta as any;
     let body = appointments[0].label;
     if (meta?.fasting) body += " (fasting required)";
@@ -245,11 +256,19 @@ function formatBundledPush(tasks: any[]): { title: string; body: string; tag: st
     };
   }
 
-  if (checkins.length > 0 && reminders.length === 0 && appointments.length === 0) {
+  if (checkins.length > 0 && reminders.length === 0 && appointments.length === 0 && proactiveCheckins.length === 0) {
     return {
       title: "💛 Check-in Time",
       body: "How are you feeling today?",
       tag: `checkin-${checkins[0].id}`,
+    };
+  }
+
+  if (proactiveCheckins.length > 0 && reminders.length === 0 && appointments.length === 0 && checkins.length === 0) {
+    return {
+      title: "💛 Checking In",
+      body: proactiveCheckins[0].label.slice(0, 100),
+      tag: `proactive-${proactiveCheckins[0].id}`,
     };
   }
 
@@ -306,7 +325,8 @@ export async function runSchedulerTick(): Promise<TickResult> {
         const chatContent = formatBundledChatMessage(tasks);
         const hasReminders = tasks.some((t) => t.kind === "REMINDER");
         const hasAppointments = tasks.some((t) => t.kind === "APPOINTMENT" || t.kind === "CRITICAL");
-        const messageType: MessageType = hasAppointments ? "APPOINTMENT" : hasReminders ? "REMINDER" : "INFO";
+        const hasCheckins = tasks.some((t) => t.kind === "CHECKIN" || t.kind === "PROACTIVE_CHECKIN");
+        const messageType: MessageType = hasAppointments ? "APPOINTMENT" : hasReminders ? "REMINDER" : hasCheckins ? "CHECKIN" : "INFO";
 
         await createChatMessage({
           userId: user.id,
