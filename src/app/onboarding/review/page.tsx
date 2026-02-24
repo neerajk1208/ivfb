@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Pill, Calendar, AlertCircle, CalendarPlus } from "lucide-react";
+import { Plus, Trash2, Pill, Calendar, AlertCircle, CalendarPlus, Bell, CheckCircle2 } from "lucide-react";
 import { Paywall } from "@/components/Paywall";
 
 interface Dose {
@@ -175,8 +175,11 @@ function ReviewPageContent() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"medications" | "appointments">("medications");
+  const [showPushStep, setShowPushStep] = useState(false);
   const [showCalendarStep, setShowCalendarStep] = useState(false);
   const [includeMedications, setIncludeMedications] = useState(false);
+  const [pushPermissionState, setPushPermissionState] = useState<"prompt" | "granted" | "denied" | "unsupported">("prompt");
+  const [isRequestingPush, setIsRequestingPush] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
   const [shouldAutoConfirm, setShouldAutoConfirm] = useState(false);
@@ -259,7 +262,7 @@ function ReviewPageContent() {
         throw new Error(data.error || "Failed to confirm protocol");
       }
       setAutoConfirmStatus("success");
-      setShowCalendarStep(true);
+      setShowPushStep(true);
     } catch (err) {
       setAutoConfirmStatus(`catch: ${err instanceof Error ? err.message : "unknown"}`);
       setError(err instanceof Error ? err.message : "Failed to confirm protocol");
@@ -492,7 +495,7 @@ function ReviewPageContent() {
         throw new Error(data.error || "Failed to confirm protocol");
       }
 
-      setShowCalendarStep(true);
+      setShowPushStep(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -549,6 +552,224 @@ function ReviewPageContent() {
           >
             Go back and edit
           </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const urlBase64ToUint8Array = (base64String: string) => {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  };
+
+  const checkPushSupport = () => {
+    if (typeof window === "undefined") return false;
+    if (!("Notification" in window)) return false;
+    if (!("serviceWorker" in navigator)) return false;
+    if (!("PushManager" in window)) return false;
+    return true;
+  };
+
+  const handleEnablePush = async () => {
+    if (!checkPushSupport()) {
+      setPushPermissionState("unsupported");
+      return;
+    }
+
+    setIsRequestingPush(true);
+    try {
+      const permission = await Notification.requestPermission();
+      
+      if (permission !== "granted") {
+        setPushPermissionState("denied");
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(
+          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ""
+        ),
+      });
+
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+
+      setPushPermissionState("granted");
+      setTimeout(() => {
+        setShowPushStep(false);
+        setShowCalendarStep(true);
+      }, 1500);
+    } catch (err) {
+      console.error("Push subscription error:", err);
+      setPushPermissionState("denied");
+    } finally {
+      setIsRequestingPush(false);
+    }
+  };
+
+  const handleSkipPush = () => {
+    setShowPushStep(false);
+    setShowCalendarStep(true);
+  };
+
+  const isIOS = () => {
+    if (typeof window === "undefined") return false;
+    return /iphone|ipad|ipod/i.test(navigator.userAgent);
+  };
+
+  const isPWA = () => {
+    if (typeof window === "undefined") return false;
+    return (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as any).standalone === true
+    );
+  };
+
+  if (showPushStep) {
+    const iosNoPWA = isIOS() && !isPWA();
+    const pushSupported = checkPushSupport();
+
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+        <div className="max-w-md w-full space-y-6">
+          <div className="text-center space-y-2">
+            <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center mb-4">
+              {pushPermissionState === "granted" ? (
+                <CheckCircle2 className="w-8 h-8 text-green-600" />
+              ) : (
+                <Bell className="w-8 h-8 text-primary" />
+              )}
+            </div>
+            <h1 className="text-2xl font-semibold">
+              {pushPermissionState === "granted" 
+                ? "Notifications Enabled!" 
+                : "Never Miss a Dose"}
+            </h1>
+            <p className="text-muted-foreground">
+              {pushPermissionState === "granted"
+                ? "You'll receive timely reminders for medications and appointments."
+                : "Get timely reminders for your medications, appointments, and important updates."}
+            </p>
+          </div>
+
+          {pushPermissionState !== "granted" && (
+            <Card>
+              <CardContent className="pt-6">
+                <ul className="space-y-3 text-sm">
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <Pill className="w-3.5 h-3.5 text-primary" />
+                    </div>
+                    <span>Medication reminders at the right time</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <Calendar className="w-3.5 h-3.5 text-primary" />
+                    </div>
+                    <span>Appointment alerts so you&apos;re never late</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <Bell className="w-3.5 h-3.5 text-primary" />
+                    </div>
+                    <span>Daily check-in prompts to track your journey</span>
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          {iosNoPWA && pushPermissionState !== "granted" && (
+            <Card className="border-amber-200 bg-amber-50">
+              <CardContent className="pt-4">
+                <p className="text-sm text-amber-800">
+                  <strong>Note:</strong> On iPhone, notifications only work when IVF Buddy is installed on your home screen. 
+                  If you skipped that step, you can still continue without notifications.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {pushPermissionState === "denied" && (
+            <Card className="border-destructive/50 bg-destructive/5">
+              <CardContent className="pt-4">
+                <p className="text-sm text-destructive">
+                  Notifications were blocked. You can enable them later in your browser or device settings.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {!pushSupported && pushPermissionState !== "granted" && (
+            <Card className="border-muted">
+              <CardContent className="pt-4">
+                <p className="text-sm text-muted-foreground">
+                  Push notifications aren&apos;t supported on this browser. You can still use IVF Buddy - 
+                  check the app for your daily reminders.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="space-y-3">
+            {pushPermissionState === "granted" ? (
+              <Button 
+                onClick={() => {
+                  setShowPushStep(false);
+                  setShowCalendarStep(true);
+                }} 
+                className="w-full"
+              >
+                Continue
+              </Button>
+            ) : pushSupported && !iosNoPWA ? (
+              <>
+                <Button 
+                  onClick={handleEnablePush} 
+                  className="w-full"
+                  disabled={isRequestingPush}
+                >
+                  {isRequestingPush ? (
+                    "Enabling..."
+                  ) : (
+                    <>
+                      <Bell className="w-4 h-4 mr-2" />
+                      Enable Notifications
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={handleSkipPush}
+                  variant="ghost"
+                  className="w-full text-muted-foreground"
+                >
+                  Skip for now
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={handleSkipPush}
+                className="w-full"
+              >
+                Continue
+              </Button>
+            )}
+          </div>
+
+          <p className="text-xs text-center text-muted-foreground">
+            You can change notification settings anytime in Settings
+          </p>
         </div>
       </div>
     );
