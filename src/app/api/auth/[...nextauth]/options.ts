@@ -1,6 +1,7 @@
 import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "@/lib/db";
+import { shouldHaveFreeAccess } from "@/config/freeAccess";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -22,10 +23,13 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!existingUser) {
+          const freeAccess = shouldHaveFreeAccess(user.email);
+          
           const newUser = await prisma.user.create({
             data: {
               email: user.email,
               name: user.name,
+              freeAccess,
             },
           });
 
@@ -35,6 +39,12 @@ export const authOptions: NextAuthOptions = {
               status: "ACTIVE",
               startDate: new Date(),
             },
+          });
+        } else if (!existingUser.freeAccess && shouldHaveFreeAccess(user.email)) {
+          // Grant free access to existing users if they're on the list
+          await prisma.user.update({
+            where: { id: existingUser.id },
+            data: { freeAccess: true },
           });
         }
 
