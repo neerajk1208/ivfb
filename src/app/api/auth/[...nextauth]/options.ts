@@ -13,7 +13,10 @@ export const authOptions: NextAuthOptions = {
   
   callbacks: {
     async signIn({ user, account }) {
+      console.log(`[Auth] signIn: email=${user.email}, provider=${account?.provider}`);
+      
       if (!user.email) {
+        console.log(`[Auth] signIn rejected: no email`);
         return false;
       }
 
@@ -56,17 +59,27 @@ export const authOptions: NextAuthOptions = {
     },
 
     async session({ session, token }) {
+      const email = session.user?.email;
+      console.log(`[Auth] session callback: email=${email}, tokenSub=${token.sub ? "yes" : "no"}`);
+      
       if (session.user && token.sub) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: session.user.email! },
-          select: { id: true, timezone: true, phoneE164: true, smsConsent: true },
-        });
-        
-        if (dbUser) {
-          (session.user as any).id = dbUser.id;
-          (session.user as any).timezone = dbUser.timezone;
-          (session.user as any).phoneE164 = dbUser.phoneE164;
-          (session.user as any).smsConsent = dbUser.smsConsent;
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { email: session.user.email! },
+            select: { id: true, timezone: true, phoneE164: true, smsConsent: true },
+          });
+          
+          if (dbUser) {
+            (session.user as any).id = dbUser.id;
+            (session.user as any).timezone = dbUser.timezone;
+            (session.user as any).phoneE164 = dbUser.phoneE164;
+            (session.user as any).smsConsent = dbUser.smsConsent;
+            console.log(`[Auth] session: user found, id=${dbUser.id}`);
+          } else {
+            console.log(`[Auth] session: no user in DB for ${email}`);
+          }
+        } catch (err) {
+          console.error(`[Auth] session error:`, err);
         }
       }
       return session;

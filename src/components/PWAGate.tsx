@@ -30,17 +30,17 @@ export function PWAGate({ children }: { children: React.ReactNode }) {
   const [platform, setPlatform] = useState<Platform>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [checking, setChecking] = useState(true);
-  const lastLoggedState = useRef<string>("");
+  const [stateLog, setStateLog] = useState<string[]>([]);
 
   useEffect(() => {
     const isPWA = typeof window !== "undefined" && isRunningAsPWA();
-    const stateKey = `status=${status},checking=${checking},showGate=${showGate},isPWA=${isPWA}`;
+    const stateKey = `${new Date().toLocaleTimeString()}: status=${status}, checking=${checking}, isPWA=${isPWA}`;
     
-    if (lastLoggedState.current !== stateKey) {
-      console.log("[PWAGate]", stateKey);
-      lastLoggedState.current = stateKey;
-    }
-  }, [status, checking, showGate]);
+    setStateLog(prev => {
+      const newLog = [...prev, stateKey].slice(-5); // Keep last 5 states
+      return newLog;
+    });
+  }, [status, checking]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -84,11 +84,15 @@ export function PWAGate({ children }: { children: React.ReactNode }) {
 
   if (checking || status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-pulse text-muted-foreground">Loading...</div>
-          <div className="text-xs text-muted-foreground/50 mt-2">
-            [session: {status}, checking: {String(checking)}]
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center w-full max-w-sm">
+          <div className="animate-pulse text-muted-foreground text-lg mb-4">Loading...</div>
+          <div className="bg-muted/50 rounded p-3 text-left">
+            <div className="text-xs font-mono text-muted-foreground space-y-1">
+              {stateLog.map((log, i) => (
+                <div key={i}>{log}</div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
