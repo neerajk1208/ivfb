@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { ServiceWorkerProvider } from "@/components/providers/ServiceWorkerProvider";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { PWAGate } from "@/components/PWAGate";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -51,9 +52,11 @@ export default function RootLayout({
       >
         <SessionProvider>
           <ServiceWorkerProvider>
-            <main className="min-h-screen">
-              {children}
-            </main>
+            <PWAGate>
+              <main className="min-h-screen">
+                {children}
+              </main>
+            </PWAGate>
             <InstallPrompt />
             <Toaster position="top-center" />
           </ServiceWorkerProvider>
