@@ -555,21 +555,69 @@ function ReviewPageContent() {
   }
 
   if (showCalendarStep) {
-    const appointmentPreviews = protocol.appointments.slice(0, 4).map((apt) => {
-      const typeLabels: Record<string, string> = {
-        BLOODWORK: "Bloodwork",
-        ULTRASOUND: "Ultrasound",
-        MONITORING: "Monitoring",
-        TRIGGER: "Trigger Shot",
-        RETRIEVAL: "Egg Retrieval",
-        TRANSFER: "Embryo Transfer",
-      };
+    const formatDateString = (dateStr: string) => {
+      const [, month, day] = dateStr.split("-").map(Number);
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      return `${months[month - 1]} ${day}`;
+    };
+
+    const formatTime = (time: string) => {
+      const [h, m] = time.split(":").map(Number);
+      const ampm = h >= 12 ? "PM" : "AM";
+      const hour = h % 12 || 12;
+      return `${hour}:${m.toString().padStart(2, "0")} ${ampm}`;
+    };
+
+    const typeLabels: Record<string, string> = {
+      BLOODWORK: "Bloodwork",
+      ULTRASOUND: "Ultrasound",
+      MONITORING: "Monitoring",
+      TRIGGER: "Trigger Shot",
+      RETRIEVAL: "Egg Retrieval",
+      TRANSFER: "Embryo Transfer",
+    };
+
+    const timeOfDayLabels: Record<string, string> = {
+      morning: "Morning",
+      afternoon: "Afternoon",
+      evening: "Evening",
+      bedtime: "Bedtime",
+    };
+    
+    const appointmentPreviews = protocol.appointments.map((apt) => {
       const dateStr = apt.date 
-        ? new Date(apt.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        ? formatDateString(apt.date)
         : `Day ${apt.dayOffset}`;
-      const timeStr = apt.exactTime || "";
+      const timeStr = apt.exactTime ? formatTime(apt.exactTime) : "";
       return `${typeLabels[apt.type] || apt.type} (${dateStr}${timeStr ? `, ${timeStr}` : ""})`;
     });
+
+    const getMedicationPreviews = () => {
+      const previews: string[] = [];
+      for (const med of protocol.medications) {
+        const doses = med.doses as Array<{ doseNumber: number; timeOfDay?: string; exactTime?: string }> | null;
+        const durationText = med.durationDays === 1 ? "1 day" : `${med.durationDays} days`;
+        const startDateStr = med.startDate ? formatDateString(med.startDate) : `Day ${med.startDayOffset}`;
+        
+        if (doses && doses.length > 0) {
+          for (const dose of doses) {
+            const timeStr = dose.exactTime 
+              ? formatTime(dose.exactTime)
+              : timeOfDayLabels[dose.timeOfDay || ""] || "";
+            const doseLabel = doses.length > 1 ? ` [Dose ${dose.doseNumber}/${doses.length}]` : "";
+            previews.push(`${med.name}${doseLabel} - ${timeStr} (${startDateStr}, ${durationText})`);
+          }
+        } else {
+          const timeStr = med.exactTime 
+            ? formatTime(med.exactTime)
+            : timeOfDayLabels[med.timeOfDay || ""] || "";
+          previews.push(`${med.name} - ${timeStr} (${startDateStr}, ${durationText})`);
+        }
+      }
+      return previews;
+    };
+
+    const medicationPreviews = includeMedications ? getMedicationPreviews() : [];
 
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
@@ -580,25 +628,23 @@ function ReviewPageContent() {
             </div>
             <h1 className="text-2xl font-semibold">Add to Google Calendar?</h1>
             <p className="text-muted-foreground">
-              We can add your appointments to your calendar
+              We can add your appointments and reminders to your calendar
             </p>
           </div>
 
           {appointmentPreviews.length > 0 && (
             <Card>
-              <CardContent className="pt-4">
-                <ul className="space-y-2 text-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Appointments ({appointmentPreviews.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <ul className="space-y-1.5 text-sm max-h-40 overflow-y-auto">
                   {appointmentPreviews.map((preview, i) => (
                     <li key={i} className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-muted-foreground" />
-                      {preview}
+                      <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="truncate">{preview}</span>
                     </li>
                   ))}
-                  {protocol.appointments.length > 4 && (
-                    <li className="text-muted-foreground">
-                      +{protocol.appointments.length - 4} more
-                    </li>
-                  )}
                 </ul>
               </CardContent>
             </Card>
@@ -615,6 +661,24 @@ function ReviewPageContent() {
                 Also add medication reminders
               </Label>
             </div>
+
+            {includeMedications && medicationPreviews.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Medication Reminders ({medicationPreviews.length})</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <ul className="space-y-1.5 text-sm max-h-40 overflow-y-auto">
+                    {medicationPreviews.map((preview, i) => (
+                      <li key={i} className="flex items-center gap-2">
+                        <Pill className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <span className="truncate">{preview}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
 
             <Button onClick={handleConnectCalendar} className="w-full">
               <CalendarPlus className="w-4 h-4 mr-2" />

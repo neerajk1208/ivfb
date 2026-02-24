@@ -185,44 +185,91 @@ export async function syncToCalendar(
   const result = { synced: 0, failed: 0 };
   const timezone = user?.timezone || "America/Los_Angeles";
 
-  if (options.includeMedications) {
-    const timeOfDayToHour: Record<string, [number, number]> = {
-      morning: [8, 0],
-      afternoon: [13, 0],
-      evening: [18, 0],
-      bedtime: [21, 0],
-    };
+  const timeOfDayToHour: Record<string, [number, number]> = {
+    morning: [8, 0],
+    afternoon: [13, 0],
+    evening: [18, 0],
+    bedtime: [21, 0],
+  };
 
-    const medsByDateTime: Map<string, { meds: typeof protocol.medications; dateTime: Date }> = new Map();
+  const parseDate = (dateStr: string | Date): [number, number, number] => {
+    const str = typeof dateStr === 'string' ? dateStr : dateStr.toISOString();
+    const [year, month, day] = str.split("T")[0].split("-").map(Number);
+    return [year, month - 1, day];
+  };
+
+  if (options.includeMedications) {
+    interface MedReminder {
+      med: typeof protocol.medications[0];
+      doseNumber?: number;
+      totalDoses?: number;
+    }
+    const medsByDateTime: Map<string, { meds: MedReminder[]; dateTime: Date }> = new Map();
 
     for (const med of protocol.medications) {
+      const [startYear, startMonth, startDay] = med.startDate 
+        ? parseDate(med.startDate)
+        : parseDate(protocol.cycleStartDate);
+      
+      const doses = med.doses as Array<{ doseNumber: number; timeOfDay?: string; exactTime?: string }> | null;
+      
       for (let day = 0; day < med.durationDays; day++) {
-        const medDate = new Date(protocol.cycleStartDate);
-        medDate.setDate(medDate.getDate() + med.startDayOffset + day);
+        const medDate = new Date(startYear, startMonth, startDay + day);
 
-        let startHour = 9;
-        let startMinute = 0;
-        if (med.exactTime) {
-          const [h, m] = med.exactTime.split(":").map(Number);
-          startHour = h;
-          startMinute = m;
-        } else if (med.timeOfDay) {
-          const t = timeOfDayToHour[med.timeOfDay];
-          if (t) {
-            startHour = t[0];
-            startMinute = t[1];
+        if (doses && doses.length > 0) {
+          for (const dose of doses) {
+            let startHour = 9;
+            let startMinute = 0;
+            if (dose.exactTime) {
+              const [h, m] = dose.exactTime.split(":").map(Number);
+              startHour = h;
+              startMinute = m;
+            } else if (dose.timeOfDay) {
+              const t = timeOfDayToHour[dose.timeOfDay];
+              if (t) {
+                startHour = t[0];
+                startMinute = t[1];
+              }
+            }
+
+            const startDateTime = new Date(medDate);
+            startDateTime.setHours(startHour, startMinute, 0, 0);
+
+            const key = startDateTime.toISOString();
+            const existing = medsByDateTime.get(key);
+            const reminder: MedReminder = { med, doseNumber: dose.doseNumber, totalDoses: doses.length };
+            if (existing) {
+              existing.meds.push(reminder);
+            } else {
+              medsByDateTime.set(key, { meds: [reminder], dateTime: startDateTime });
+            }
           }
-        }
-
-        const startDateTime = new Date(medDate);
-        startDateTime.setHours(startHour, startMinute, 0, 0);
-
-        const key = startDateTime.toISOString();
-        const existing = medsByDateTime.get(key);
-        if (existing) {
-          existing.meds.push(med);
         } else {
-          medsByDateTime.set(key, { meds: [med], dateTime: startDateTime });
+          let startHour = 9;
+          let startMinute = 0;
+          if (med.exactTime) {
+            const [h, m] = med.exactTime.split(":").map(Number);
+            startHour = h;
+            startMinute = m;
+          } else if (med.timeOfDay) {
+            const t = timeOfDayToHour[med.timeOfDay];
+            if (t) {
+              startHour = t[0];
+              startMinute = t[1];
+            }
+          }
+
+          const startDateTime = new Date(medDate);
+          startDateTime.setHours(startHour, startMinute, 0, 0);
+
+          const key = startDateTime.toISOString();
+          const existing = medsByDateTime.get(key);
+          const reminder: MedReminder = { med };
+          if (existing) {
+            existing.meds.push(reminder);
+          } else {
+            medsByDateTime.set(key, { meds: [reminder], dateTime: startDateTime });
+          }
         }
       }
     }
@@ -231,10 +278,16 @@ export async function syncToCalendar(
       const endDateTime = new Date(dateTime);
       endDateTime.setMinutes(dateTime.getMinutes() + 15);
 
-      const medList = meds.map((m) => {
-        let label = m.name;
-        if (m.dosageAmount && m.dosageUnit) {
-          label += ` ${m.dosageAmount} ${m.dosageUnit}`;
+      const medList = meds.map((r) => {
+        let label = r.med.name;
+        if (r.med.dosageAmount && r.med.dosageUnit) {
+          label += ` ${r.med.dosageAmount} ${r.med.dosageUnit}`;
+        }
+        if (r.med.unitStrength) {
+          label += ` (${r.med.unitStrength} each)`;
+        }
+        if (r.doseNumber && r.totalDoses && r.totalDoses > 1) {
+          label += ` [Dose ${r.doseNumber}/${r.totalDoses}]`;
         }
         return label;
       });
@@ -245,7 +298,7 @@ export async function syncToCalendar(
 
       const description = meds.length > 1
         ? medList.map((l) => `• ${l}`).join("\n")
-        : meds[0].instructions || undefined;
+        : meds[0].med.instructions || undefined;
 
       const event: CalendarEvent = {
         summary,
@@ -264,8 +317,13 @@ export async function syncToCalendar(
   }
 
   for (const apt of protocol.appointments) {
-    const aptDate = new Date(protocol.cycleStartDate);
-    aptDate.setDate(aptDate.getDate() + apt.dayOffset);
+    const [aptYear, aptMonth, aptDay] = apt.date 
+      ? parseDate(apt.date)
+      : (() => {
+          const d = new Date(protocol.cycleStartDate);
+          d.setDate(d.getDate() + apt.dayOffset);
+          return [d.getFullYear(), d.getMonth(), d.getDate()] as [number, number, number];
+        })();
 
     let startHour = 9;
     let startMinute = 0;
@@ -275,9 +333,7 @@ export async function syncToCalendar(
       startMinute = m;
     }
 
-    const startDateTime = new Date(aptDate);
-    startDateTime.setHours(startHour, startMinute, 0, 0);
-
+    const startDateTime = new Date(aptYear, aptMonth, aptDay, startHour, startMinute, 0, 0);
     const endDateTime = new Date(startDateTime);
     endDateTime.setHours(startDateTime.getHours() + 1);
 
