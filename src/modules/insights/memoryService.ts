@@ -15,29 +15,35 @@ export async function storeMemory(
   content: string,
   source: "chat" | "checkin" | "explicit"
 ): Promise<void> {
-  const existing = await prisma.insight_UserMemory.findFirst({
-    where: {
-      userId,
-      category,
-      content: { contains: content.slice(0, 50), mode: "insensitive" },
-    },
-  });
+  const normalizedContent = content.toLowerCase().trim();
+  
+  // Use transaction to prevent race conditions
+  await prisma.$transaction(async (tx) => {
+    const allMemories = await tx.insight_UserMemory.findMany({
+      where: { userId, category },
+      select: { id: true, content: true },
+    });
 
-  if (existing) {
-    await prisma.insight_UserMemory.update({
-      where: { id: existing.id },
-      data: { updatedAt: new Date() },
-    });
-  } else {
-    await prisma.insight_UserMemory.create({
-      data: {
-        userId,
-        category,
-        content,
-        source,
-      },
-    });
-  }
+    const duplicate = allMemories.find(
+      (m) => m.content.toLowerCase().trim() === normalizedContent
+    );
+
+    if (duplicate) {
+      await tx.insight_UserMemory.update({
+        where: { id: duplicate.id },
+        data: { updatedAt: new Date() },
+      });
+    } else {
+      await tx.insight_UserMemory.create({
+        data: {
+          userId,
+          category,
+          content,
+          source,
+        },
+      });
+    }
+  });
 }
 
 export async function getMemoriesForUser(

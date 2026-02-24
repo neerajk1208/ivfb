@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import type { CheckInCreate } from "@/lib/validate";
 import { updateDailyMoodInsight } from "@/modules/insights/trendsService";
+import { toZonedTime } from "date-fns-tz";
+import { startOfDay, differenceInDays } from "date-fns";
 
 export async function createCheckIn(
   userId: string,
@@ -20,17 +22,25 @@ export async function createCheckIn(
   // Update daily mood insight in background
   const cycle = await prisma.cycle.findUnique({
     where: { id: data.cycleId },
-    include: { protocol: true },
+    include: { 
+      protocol: true,
+      user: { select: { timezone: true } },
+    },
   });
 
   if (cycle?.protocol) {
-    const today = new Date();
-    const cycleStart = cycle.protocol.cycleStartDate;
-    const cycleDayIndex = Math.floor(
-      (today.getTime() - cycleStart.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const userTimezone = cycle.user.timezone || "America/Los_Angeles";
+    
+    // Calculate cycle day index in user's timezone
+    const todayInTz = toZonedTime(new Date(), userTimezone);
+    const cycleStartInTz = toZonedTime(cycle.protocol.cycleStartDate, userTimezone);
+    
+    const todayStart = startOfDay(todayInTz);
+    const cycleStartDay = startOfDay(cycleStartInTz);
+    
+    const cycleDayIndex = differenceInDays(todayStart, cycleStartDay);
 
-    updateDailyMoodInsight(userId, data.cycleId, today, cycleDayIndex).catch((err) => {
+    updateDailyMoodInsight(userId, data.cycleId, todayStart, cycleDayIndex).catch((err) => {
       console.error("Failed to update daily mood insight:", err);
     });
   }

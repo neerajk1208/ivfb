@@ -120,51 +120,57 @@ export async function createProactiveCheckInTasks(
       const checkInTime = addHours(eventDateInTz, config.delayHours);
       const planDayDate = startOfDay(checkInTime);
 
-      // Check for existing task to prevent duplicates on re-confirmation
-      const existingTask = await prisma.task.findFirst({
-        where: {
-          cycleId,
-          kind: "PROACTIVE_CHECKIN",
-          dueAt: checkInTime,
-        },
-      });
-
-      if (existingTask) continue;
-
-      let planDay = await prisma.planDay.findFirst({
-        where: { cycleId, date: planDayDate },
-      });
-
-      if (!planDay) {
-        const cycleDayIndex = Math.floor(
-          (planDayDate.getTime() - cycleStartDate.getTime()) / (1000 * 60 * 60 * 24)
-        );
-
-        planDay = await prisma.planDay.create({
-          data: {
+      // Use transaction for atomic PlanDay + Task creation
+      const wasCreated = await prisma.$transaction(async (tx) => {
+        // Check for existing task to prevent duplicates
+        const existingTask = await tx.task.findFirst({
+          where: {
             cycleId,
-            date: planDayDate,
-            cycleDayIndex,
-            title: `Day ${cycleDayIndex}`,
+            kind: "PROACTIVE_CHECKIN",
+            dueAt: checkInTime,
           },
         });
-      }
 
-      await prisma.task.create({
-        data: {
-          cycleId,
-          planDayId: planDay.id,
-          kind: "PROACTIVE_CHECKIN",
-          label: config.message,
-          dueAt: checkInTime,
-          displayInUpcoming: config.displayInUI,
-          meta: {
-            eventType: apt.type,
-            isProactive: true,
+        if (existingTask) return false;
+
+        let planDay = await tx.planDay.findFirst({
+          where: { cycleId, date: planDayDate },
+        });
+
+        if (!planDay) {
+          const cycleDayIndex = Math.floor(
+            (planDayDate.getTime() - cycleStartDate.getTime()) / (1000 * 60 * 60 * 24)
+          );
+
+          planDay = await tx.planDay.create({
+            data: {
+              cycleId,
+              date: planDayDate,
+              cycleDayIndex,
+              title: `Day ${cycleDayIndex}`,
+            },
+          });
+        }
+
+        await tx.task.create({
+          data: {
+            cycleId,
+            planDayId: planDay.id,
+            kind: "PROACTIVE_CHECKIN",
+            label: config.message,
+            dueAt: checkInTime,
+            displayInUpcoming: config.displayInUI,
+            meta: {
+              eventType: apt.type,
+              isProactive: true,
+            },
           },
-        },
+        });
+
+        return true;
       });
-      created++;
+
+      if (wasCreated) created++;
     }
   }
 

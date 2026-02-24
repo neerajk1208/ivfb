@@ -26,13 +26,28 @@ export async function recordSuggestionShown(
   cycleId: string,
   suggestionId: string
 ): Promise<void> {
-  await prisma.insight_UserSuggestion.create({
-    data: {
+  // Check if already recorded recently to prevent duplicates
+  const recentCutoff = new Date();
+  recentCutoff.setMinutes(recentCutoff.getMinutes() - 5);
+
+  const existing = await prisma.insight_UserSuggestion.findFirst({
+    where: {
       userId,
       cycleId,
       suggestionId,
+      shownAt: { gte: recentCutoff },
     },
   });
+
+  if (!existing) {
+    await prisma.insight_UserSuggestion.create({
+      data: {
+        userId,
+        cycleId,
+        suggestionId,
+      },
+    });
+  }
 }
 
 export async function recordSuggestionFeedback(
