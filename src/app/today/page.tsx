@@ -194,7 +194,7 @@ function TodayPageContent() {
   if (status === "loading" || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center pb-20">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-muted-foreground">Loading... [T]</div>
       </div>
     );
   }

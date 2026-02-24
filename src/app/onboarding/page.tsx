@@ -86,7 +86,7 @@ export default function OnboardingPage() {
       fetch("/api/protocol/current")
         .then((res) => res.json())
         .then((data) => {
-          if (data.success && data.data?.medications?.length > 0) {
+          if (data.success && data.data?.status === "ACTIVE" && data.data?.medications?.length > 0) {
             router.push("/today");
           } else {
             setCheckingCycle(false);
@@ -227,7 +227,7 @@ export default function OnboardingPage() {
   if (status === "loading" || checkingCycle) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-muted-foreground">Loading... [O]</div>
       </div>
     );
   }

@@ -19,7 +19,7 @@ export default function LandingPage() {
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-muted-foreground">Loading... [H]</div>
       </div>
     );
   }

@@ -85,27 +85,18 @@ export function PWAGate({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Only show loading on initial mount if we haven't authenticated before
-  // This prevents loading flash during redirects
-  if (!mounted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
-      </div>
-    );
+  // If we've authenticated before in this session, skip all loading screens
+  if (hasAuthenticated) {
+    if (!mounted || status === "loading") {
+      return <>{children}</>;
+    }
   }
 
-  // If we've authenticated before in this session, skip the loading screen
-  // and let the page handle its own loading state
-  if (status === "loading" && hasAuthenticated) {
-    return <>{children}</>;
-  }
-
-  // First time loading - show loading screen
-  if (status === "loading") {
+  // First time - show loading while checking session
+  if (!mounted || status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-muted-foreground">Loading... [G]</div>
       </div>
     );
   }
