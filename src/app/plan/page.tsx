@@ -86,8 +86,12 @@ const APPOINTMENT_LABELS: Record<string, string> = {
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  // Parse date string directly to avoid timezone issues
+  // dateStr can be "2025-02-15" or "2025-02-15T00:00:00.000Z"
+  const datePart = dateStr.split("T")[0];
+  const [year, month, day] = datePart.split("-").map(Number);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${months[month - 1]} ${day}`;
 }
 
 function formatTime(timeStr: string | null): string {
