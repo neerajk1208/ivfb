@@ -1,4 +1,4 @@
-const CACHE_NAME = "ivf-buddy-v3";
+const CACHE_NAME = "ivf-buddy-v4";
 const OFFLINE_URL = "/offline.html";
 
 // Only cache static assets and pages that don't depend on auth state
@@ -11,6 +11,10 @@ const NO_CACHE_PATHS = [
   "/",
   "/onboarding",
   "/api/",
+  "/today",
+  "/chat",
+  "/plan",
+  "/settings",
 ];
 
 self.addEventListener("install", (event) => {
