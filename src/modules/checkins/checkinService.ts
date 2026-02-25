@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import type { CheckInCreate } from "@/lib/validate";
 import { updateDailyMoodInsight } from "@/modules/insights/trendsService";
 import { toZonedTime } from "date-fns-tz";
-import { startOfDay, differenceInDays } from "date-fns";
+import { startOfDay, differenceInDays, subHours } from "date-fns";
 
 export async function createCheckIn(
   userId: string,
@@ -78,4 +78,62 @@ export async function getTodayCheckIn(userId: string, cycleId: string) {
     },
     orderBy: { createdAt: "desc" },
   });
+}
+
+/**
+ * Create a passive check-in from inferred mood in chat.
+ * Only creates if no recent check-in exists (within last 2 hours) to avoid spam.
+ */
+export async function createPassiveCheckIn(
+  userId: string,
+  cycleId: string,
+  inferredMood: number,
+  timezone: string
+): Promise<void> {
+  // Check for recent check-in to avoid creating too many
+  const recentCutoff = subHours(new Date(), 2);
+  const recentCheckIn = await prisma.checkIn.findFirst({
+    where: {
+      userId,
+      cycleId,
+      createdAt: { gte: recentCutoff },
+    },
+  });
+
+  // If there's a recent check-in, don't create another
+  if (recentCheckIn) {
+    return;
+  }
+
+  // Create the passive check-in
+  await prisma.checkIn.create({
+    data: {
+      userId,
+      cycleId,
+      mood: inferredMood,
+      symptoms: [],
+      note: null,
+      source: "CHAT_INFERRED",
+    },
+  });
+
+  // Update daily mood insight
+  const cycle = await prisma.cycle.findUnique({
+    where: { id: cycleId },
+    include: { protocol: true },
+  });
+
+  if (cycle?.protocol) {
+    const todayInTz = toZonedTime(new Date(), timezone);
+    const cycleStartInTz = toZonedTime(cycle.protocol.cycleStartDate, timezone);
+    
+    const todayStart = startOfDay(todayInTz);
+    const cycleStartDay = startOfDay(cycleStartInTz);
+    
+    const cycleDayIndex = differenceInDays(todayStart, cycleStartDay);
+
+    updateDailyMoodInsight(userId, cycleId, todayStart, cycleDayIndex).catch((err) => {
+      console.error("Failed to update daily mood insight from passive check-in:", err);
+    });
+  }
 }

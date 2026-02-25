@@ -523,6 +523,7 @@ src/
 │   ├── insights/
 │   │   ├── memoryService.ts       # User memory
 │   │   ├── trendsService.ts       # Mood trends
+│   │   ├── cycleSummaryService.ts # End-of-cycle summary
 │   │   └── proactiveCheckinService.ts
 │   ├── push/
 │   │   └── pushService.ts         # Push notifications
@@ -566,14 +567,22 @@ SafetyAuditLog          # Tier 2+ safety events for review
 - Post-LLM filtering (toxic positivity, medical advice)
 - Audit logging for Tier 2+ events
 
+#### ✅ **Passive Mood Inference from Chat** (Implemented)
+- Mood inferred from tier/category classification during chat
+- Creates passive check-ins (source: "CHAT_INFERRED")
+- Feeds into daily mood insights automatically
+- Rate-limited to avoid spam (max 1 per 2 hours)
+
+#### ✅ **Cycle Summary Generator** (Implemented)
+- `generateCycleSummary()` function in `cycleSummaryService.ts`
+- Captures: total appointments, planned injections, mood by day/phase
+- Identifies hardest and best days
+- Extracts "what helped" from memories
+- Generates suggestions for next cycle based on patterns
+
 ### High Priority
 
-#### 1. **Cycle Summary Generation** (Not Implemented)
-- `Insight_CycleSummary` table exists but is never populated
-- Should generate end-of-cycle insights: average mood, what helped, total injections
-- Could provide valuable feedback for future cycles
-
-#### 2. **Smarter Suggestion Selection**
+#### 1. **Smarter Suggestion Selection**
 - Current: Simple phase + symptom matching
 - Improvement: Track which suggestions user found helpful (`Insight_UserSuggestion.wasHelpful`)
 - Learn user's preferred coping style over time

@@ -77,7 +77,7 @@ export const checkInCreateSchema = z.object({
   mood: z.number().int().min(1).max(5).nullable().optional(),
   symptoms: z.array(z.string()).optional(),
   note: z.string().nullable().optional(),
-  source: z.enum(["SMS", "APP"]).optional(),
+  source: z.enum(["SMS", "APP", "CHAT_INFERRED"]).optional(),
 });
 
 export type ProfileUpdate = z.infer<typeof profileUpdateSchema>;

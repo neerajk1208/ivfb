@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
 import { generateBuddyReply } from "@/modules/buddy/buddyService";
+import { createPassiveCheckIn } from "@/modules/checkins/checkinService";
 
 const MAX_DAILY_MESSAGES = 30;
 
@@ -218,13 +219,15 @@ export async function sendUserMessage(
     select: { timezone: true },
   });
 
+  const userTimezone = user?.timezone || "America/Los_Angeles";
+  
   const buddyResponse = await generateBuddyReply({
     userId,
     cycleId,
     userMessage: content,
     mood: null,
     symptoms: [],
-    userTimezone: user?.timezone || "America/Los_Angeles",
+    userTimezone,
   });
 
   const buddyMessage = await createChatMessage({
@@ -236,10 +239,53 @@ export async function sendUserMessage(
     meta: {
       tags: buddyResponse.tags,
       escalate: buddyResponse.escalation,
+      tier: buddyResponse.tier,
+      category: buddyResponse.category,
     },
   });
 
+  // Create passive check-in based on inferred mood from tier/category
+  const inferredMood = inferMoodFromTier(buddyResponse.tier, buddyResponse.category);
+  if (inferredMood !== null) {
+    createPassiveCheckIn(userId, cycleId, inferredMood, userTimezone).catch(() => {});
+  }
+
   return { userMessage, buddyReply: buddyMessage, limitReached: false };
+}
+
+/**
+ * Infer mood score (1-5) from safety tier and category.
+ * Returns null if mood cannot be confidently inferred.
+ */
+function inferMoodFromTier(tier: number, category: string): number | null {
+  // Tier 3 (crisis) → mood 1
+  if (tier === 3) {
+    return 1;
+  }
+  
+  // Tier 2 mental health (panic, can't function) → mood 1-2
+  if (tier === 2 && category === "mental_health") {
+    return 1;
+  }
+  
+  // Tier 2 medical → don't infer mood (physical, not emotional)
+  if (tier === 2 && category === "medical") {
+    return null;
+  }
+  
+  // Tier 1 (elevated - hopelessness, despair) → mood 2
+  if (tier === 1) {
+    return 2;
+  }
+  
+  // Tier 0 positive (happy, excited) → mood 4-5
+  if (tier === 0 && category === "positive") {
+    return 4;
+  }
+  
+  // Tier 0 normal → don't infer (too broad)
+  // We only want to capture clear emotional signals
+  return null;
 }
 
 export async function markMessagesAsRead(userId: string, cycleId: string, dateString: string, timezone: string) {
