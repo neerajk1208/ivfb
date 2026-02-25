@@ -58,6 +58,7 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showReuploadDialog, setShowReuploadDialog] = useState(false);
   const [message, setMessage] = useState("");
 
   const [pushSupported, setPushSupported] = useState(false);
@@ -702,13 +703,38 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => router.push("/onboarding/upload?refresh=1")}
-            >
-              Re-upload Protocol
-            </Button>
+            <Dialog open={showReuploadDialog} onOpenChange={setShowReuploadDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="w-full">
+                  Re-upload Protocol
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Replace your protocol?</DialogTitle>
+                  <DialogDescription>
+                    This will delete your current protocol including all medications, 
+                    appointments, tasks, and check-ins. Your chat history will be preserved.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowReuploadDialog(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowReuploadDialog(false);
+                      router.push("/onboarding?reupload=true");
+                    }}
+                  >
+                    Continue
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             <p className="text-xs text-muted-foreground mt-2 text-center">
               Upload a new protocol document to update your medications
             </p>

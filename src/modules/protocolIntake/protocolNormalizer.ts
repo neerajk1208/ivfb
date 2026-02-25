@@ -48,6 +48,7 @@ export async function saveProtocolPlanDraft(input: SaveProtocolDraftInput) {
   });
 
   if (existingPlan) {
+    // Delete protocol-related data
     await prisma.medication.deleteMany({
       where: { protocolPlanId: existingPlan.id },
     });
@@ -59,6 +60,22 @@ export async function saveProtocolPlanDraft(input: SaveProtocolDraftInput) {
     });
     await prisma.protocolPlan.delete({
       where: { id: existingPlan.id },
+    });
+
+    // Delete cycle-related data that needs to be regenerated
+    // (Tasks, PlanDays, CheckIns, ConversationState)
+    // Keep: ChatMessages (conversation history), Insight_* tables (user memories)
+    await prisma.task.deleteMany({
+      where: { cycleId },
+    });
+    await prisma.planDay.deleteMany({
+      where: { cycleId },
+    });
+    await prisma.checkIn.deleteMany({
+      where: { cycleId },
+    });
+    await prisma.conversationState.deleteMany({
+      where: { cycleId },
     });
   }
 

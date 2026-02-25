@@ -1,8 +1,8 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -41,9 +41,11 @@ const COMMON_TIMEZONES = [
   { value: "Australia/Sydney", label: "Sydney (AEST)" },
 ];
 
-export default function OnboardingPage() {
+function OnboardingPageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isReupload = searchParams.get("reupload") === "true";
 
   const [step, setStep] = useState(1);
   const [timezone, setTimezone] = useState("");
@@ -86,9 +88,22 @@ export default function OnboardingPage() {
       fetch("/api/protocol/current")
         .then((res) => res.json())
         .then((data) => {
-          if (data.success && data.data?.status === "ACTIVE" && data.data?.medications?.length > 0) {
-            router.push("/today");
+          if (data.success && data.data) {
+            const protocolStatus = data.data.status;
+            const hasMedications = data.data.medications?.length > 0;
+
+            if (protocolStatus === "DRAFT") {
+              // Resume incomplete onboarding - go to review page
+              router.push("/onboarding/review");
+            } else if (protocolStatus === "ACTIVE" && hasMedications && !isReupload) {
+              // Active protocol and not re-uploading - go to today
+              router.push("/today");
+            } else {
+              // ACTIVE + reupload, or no medications - stay on onboarding
+              setCheckingCycle(false);
+            }
           } else {
+            // No protocol exists
             setCheckingCycle(false);
           }
         })
@@ -96,7 +111,7 @@ export default function OnboardingPage() {
           setCheckingCycle(false);
         });
     }
-  }, [status, router]);
+  }, [status, router, isReupload]);
 
   const validateFile = (file: File): string | null => {
     if (!(file.type in ACCEPTED_TYPES)) {
@@ -547,5 +562,13 @@ export default function OnboardingPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-pulse text-muted-foreground">Loading...</div></div>}>
+      <OnboardingPageContent />
+    </Suspense>
   );
 }

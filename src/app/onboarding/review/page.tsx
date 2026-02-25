@@ -197,6 +197,22 @@ function ReviewPageContent() {
     { id: 4, label: "Finalizing your schedule" },
   ];
 
+  // Helper to show the appropriate post-confirm step
+  const showNextStepAfterConfirm = () => {
+    // Check if push notifications are already granted
+    const pushAlreadyGranted = 
+      typeof Notification !== "undefined" && 
+      Notification.permission === "granted";
+    
+    if (pushAlreadyGranted) {
+      // Skip push step, go directly to calendar step
+      setShowPushStep(false);
+      setShowCalendarStep(true);
+    } else {
+      setShowPushStep(true);
+    }
+  };
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
@@ -301,7 +317,7 @@ function ReviewPageContent() {
       
       setAutoConfirmStatus("success");
       setShowConfirmProgress(false);
-      setShowPushStep(true);
+      showNextStepAfterConfirm();
     } catch (err) {
       setAutoConfirmStatus(`catch: ${err instanceof Error ? err.message : "unknown"}`);
       setConfirmError(err instanceof Error ? err.message : "Failed to confirm protocol");
@@ -552,7 +568,7 @@ function ReviewPageContent() {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       setShowConfirmProgress(false);
-      setShowPushStep(true);
+      showNextStepAfterConfirm();
     } catch (err) {
       setConfirmError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
