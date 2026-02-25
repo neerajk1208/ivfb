@@ -2,6 +2,7 @@
 export const FREE_ACCESS_EMAILS: string[] = [
   "neerajk1208@gmail.com",
   "svarma1016@gmail.com",
+  "raahilmalhotra@gmail.com",
 ];
 
 export function shouldHaveFreeAccess(email: string): boolean {
