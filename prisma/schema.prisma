@@ -315,3 +315,23 @@ model Insight_ProactiveCheckIn {
   @@index([userId, cycleId])
   @@index([scheduledFor, sent])
 }
+
+// ============= SAFETY AUDIT LOG =============
+// Logs all Tier 2+ safety classifications for review and liability protection
+
+model SafetyAuditLog {
+  id            String   @id @default(cuid())
+  userId        String
+  cycleId       String?
+  tier          Int      // 0, 1, 2, 3
+  category      String   // normal, positive, elevated, mental_health, medical, crisis
+  triggerPhrase String?  // What triggered the classification
+  source        String   // hard_coded or llm
+  userMessage   String   @db.Text
+  responseText  String   @db.Text
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([tier])
+}

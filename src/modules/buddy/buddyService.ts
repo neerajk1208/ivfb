@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getOpenAIClient, getModel } from "./openaiClient";
-import { buddyReplySchema, buddyReplyJsonSchema, type BuddyReply } from "./buddySchemas";
+import { buddyReplySchema, type BuddyReply } from "./buddySchemas";
 import { getFallbackReply } from "./fallbackRules";
-import { containsSevereKeyword, escalationResponse } from "@/config/buddy/severeKeywords";
 import { buddySystemPrompt, buddyContextTemplate } from "@/config/buddy/system";
 import { appConfig } from "@/config/app";
 import { getResourcesForContext } from "@/config/buddy/resources";
@@ -11,6 +10,10 @@ import { getMemoriesForUser, formatMemoriesForContext, processMessageForMemories
 import { getRecentMoodTrend, formatTrendForContext } from "@/modules/insights/trendsService";
 import { getCycleDayIndex } from "@/lib/time";
 import { toZonedTime } from "date-fns-tz";
+import { hardCodedClassify, combineClassifications, getSafetyAppendix } from "./safetyClassifier";
+import { filterResponse } from "./responseFilter";
+import { logSafetyEvent } from "./auditService";
+import type { SafetyTier, SafetyCategory } from "@/config/buddy/safetyTiers";
 
 interface BuddyContext {
   userId: string;
@@ -22,21 +25,55 @@ interface BuddyContext {
 }
 
 export async function generateBuddyReply(context: BuddyContext): Promise<BuddyReply> {
-  if (containsSevereKeyword(context.userMessage)) {
-    return {
-      messageText: escalationResponse,
-      tags: ["escalation", "urgent"],
-      escalation: true,
-    };
-  }
-
   try {
+    // Step 1: Hard-coded classification check (for tier, NOT to skip LLM)
+    const hardCodedClassification = hardCodedClassify(context.userMessage);
+
+    // Step 2: Build enriched context
     const enrichedContext = await buildEnrichedContext(context);
-    const reply = await callOpenAI(enrichedContext, context.userMessage);
     
-    await updateConversationState(context.userId, context.cycleId, context.userMessage, reply.messageText);
+    // Step 3: Always call LLM - we want the warm response
+    const llmReply = await callOpenAI(enrichedContext, context.userMessage);
     
-    return reply;
+    // Step 4: Combine classifications - take the more severe tier
+    const finalClassification = combineClassifications(
+      hardCodedClassification,
+      llmReply.tier as SafetyTier,
+      llmReply.category as SafetyCategory
+    );
+
+    // Step 5: Apply post-processing filter (toxic positivity, medical advice, etc.)
+    let finalMessage = filterResponse(llmReply.messageText);
+
+    // Step 6: Append scaled safety message based on final tier
+    finalMessage += getSafetyAppendix(finalClassification.tier, finalClassification.category);
+
+    // Step 7: Audit log for Tier 2+ events
+    if (finalClassification.tier >= 2) {
+      logSafetyEvent({
+        userId: context.userId,
+        cycleId: context.cycleId,
+        classification: finalClassification,
+        userMessage: context.userMessage,
+        responseText: finalMessage,
+      }).catch(() => {}); // Don't block on logging
+    }
+
+    // Step 8: Update conversation state
+    await updateConversationState(
+      context.userId, 
+      context.cycleId, 
+      context.userMessage, 
+      finalMessage
+    );
+
+    return {
+      ...llmReply,
+      messageText: finalMessage,
+      tier: finalClassification.tier,
+      category: finalClassification.category,
+      escalation: finalClassification.tier >= 2,
+    };
   } catch (error) {
     console.error("Buddy reply generation failed:", error);
     return getFallbackReply(context.mood);
